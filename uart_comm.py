@@ -119,6 +119,10 @@ class LuSEE_UART:
         self.connection.close()
         print("Connection Closed")
 
+    def reset_FPGA(self):
+        luseeUart.write_reg(reg = 0x00, val = 0xFFFF, confirm = False)
+        luseeUart.write_reg(reg = 0x00, val = 0x0000, confirm = True)
+
     def reset_ADC(self):
         luseeUart.write_reg(reg = 0x03, val = 0x0200, confirm = False)
         time.sleep(.025)
@@ -225,14 +229,51 @@ class LuSEE_UART:
             val = val - (1 << bits)        # compute negative value
         return val                         # return positive value as is
 
+    def format_pfb_data(self, data):
+        data_len = len(data)
+        #Divide by 4 because each FPGA data packet is 4 bytes
+        total_packets = int(data_len / 4)
+        unpacked_data = list(struct.unpack(f"<{total_packets}i", data))
+        unpacked_data.reverse()
+        return unpacked_data
+
     def read_pfb_data(self):
+        self.reset_FPGA()
         self.reset_fifo()
+        luseeUart.write_reg(reg = 0x0A, val = 0x0322, confirm = True)
+        luseeUart.write_reg(reg = 0x09, val = 0x0001, confirm = True)
         luseeUart.write_reg(reg = 0x04, val = 0x0006, confirm = True)
         luseeUart.write_reg(reg = 0x06, val = 0x0003, confirm = True)
-        luseeUart.write_reg(reg = 0x09, val = 0x0001, confirm = True)
-        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = True)
-        raw_data = self.readout_fifo()
-        print(raw_data)
+        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = False)
+        raw_pfb_data = self.readout_fifo()
+        pfb_data = self.format_pfb_data(raw_pfb_data)
+        return pfb_data
+
+    def plot_pfb(self, data):
+        fig, ax = plt.subplots()
+
+        x = []
+        for i in range(len(data)):
+            x.append(i / 2048 * 100 / 2)
+
+        title = "pfb_output"
+        fig.suptitle(title, fontsize = 20)
+        yaxis = "counts"
+        ax.set_ylabel(yaxis, fontsize=14)
+        ax.set_yscale('log')
+        ax.set_xlabel('MHz', fontsize=14)
+        ax.ticklabel_format(style='plain', useOffset=False, axis='x')
+        ax.plot(x, data)
+#        print(x)
+#        print(y)
+#        ax.set_xlim([0,1])
+
+        plt.show()
+        plot_path = os.path.join(os.getcwd(), "plots")
+        if not (os.path.exists(plot_path)):
+            os.makedirs(plot_path)
+
+        fig.savefig (os.path.join(plot_path, "plot.jpg"))
 
 if __name__ == "__main__":
     arg = sys.argv[1]
@@ -249,3 +290,6 @@ if __name__ == "__main__":
         luseeUart.save_data(ch1)
     else:
         pfb_output = luseeUart.read_pfb_data()
+        luseeUart.plot_pfb(pfb_output)
+        luseeUart.save_data(pfb_output)
+        luseeUart.close()
