@@ -139,7 +139,7 @@ class LuSEE_UART:
     def read_fifo(self):
         luseeUart.write_reg(reg = 0x05, val = self.rawbytes, confirm = True)
         luseeUart.write_reg(reg = 0x06, val = 0x0001, confirm = True)
-        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = True)
+        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = False)
 
     def readout_fifo(self):
         response = bytes()
