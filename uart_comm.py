@@ -90,12 +90,15 @@ class LuSEE_UART:
 
         i = 0
         self.connection.write(read_string)
+        time.sleep(0.25)
         while i < self.rw_tries:
             try:
                 response = self.connection.read(self.resp_bytes)
                 response_int = struct.unpack(">I", response)[0]
                 break
             except Exception as e:
+                print(e)
+                print(f"Read failed, check this")
                 try:
                     response_int = struct.unpack(">I", response[-4:])[0]
                     break
@@ -125,7 +128,7 @@ class LuSEE_UART:
         time.sleep(.025)
 
     def reset_fifo(self):
-        luseeUart.write_reg(reg = 0x07, val = 0x0842, confirm = True)
+        luseeUart.write_reg(reg = 0x07, val = 0x0001, confirm = True)
         luseeUart.write_reg(reg = 0x07, val = 0x0000, confirm = True)
 
     def load_fifo(self):
@@ -136,7 +139,7 @@ class LuSEE_UART:
     def read_fifo(self):
         luseeUart.write_reg(reg = 0x05, val = self.rawbytes, confirm = True)
         luseeUart.write_reg(reg = 0x06, val = 0x0001, confirm = True)
-        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = False)
+        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = True)
 
     def readout_fifo(self):
         response = bytes()
@@ -222,21 +225,27 @@ class LuSEE_UART:
             val = val - (1 << bits)        # compute negative value
         return val                         # return positive value as is
 
+    def read_pfb_data(self):
+        self.reset_fifo()
+        luseeUart.write_reg(reg = 0x04, val = 0x0006, confirm = True)
+        luseeUart.write_reg(reg = 0x06, val = 0x0003, confirm = True)
+        luseeUart.write_reg(reg = 0x09, val = 0x0001, confirm = True)
+        luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = True)
+        raw_data = self.readout_fifo()
+        print(raw_data)
 
 if __name__ == "__main__":
     arg = sys.argv[1]
 
     luseeUart = LuSEE_UART()
     luseeUart.connect_usb()
-    if (arg == "start"):
-        luseeUart.initialize()
+    luseeUart.initialize()
 
-    raw_data = luseeUart.read_raw_data()
-    luseeUart.close()
-
-    ch1, ch2 = luseeUart.format_data(raw_data)
-    #for i in range(len(ch1)):
-        #print(hex(ch1[i]))
-    #luseeUart.save_to_disk(raw_data)
-    luseeUart.plot(ch1)
-    luseeUart.save_data(ch1)
+    if (arg == "raw"):
+        raw_data = luseeUart.read_raw_data()
+        luseeUart.close()
+        ch1, ch2 = luseeUart.format_data(raw_data)
+        luseeUart.plot(ch1)
+        luseeUart.save_data(ch1)
+    else:
+        pfb_output = luseeUart.read_pfb_data()
