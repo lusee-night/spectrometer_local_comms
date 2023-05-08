@@ -22,7 +22,7 @@ class LuSEE_UART:
         self.rw_tries = 10
         self.resp_bytes = 100
         self.rawbytes = 0x1FFF
-        self.num_packets = 1
+        self.num_packets = 20
 
         if (self.port == None):
             self.get_connections()
@@ -148,8 +148,13 @@ class LuSEE_UART:
     def readout_fifo(self):
         response = bytes()
         for i in range(self.num_packets + 1):
-            response += self.connection.read_until(expected = "\n", size = 0xFFFF)
-            print(f"Received packet #{i}")
+            new_data = self.connection.read(size = 0xFFFF)
+            if (len(new_data) == 0):
+                print("Raw data buffer empty")
+                break
+            else:
+                response += new_data
+                print(f"Received packet #{i}")
         print(f"Received {len(response)} bytes")
         return response
 
