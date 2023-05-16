@@ -10,7 +10,8 @@ class LuSEE_UART:
     def __init__(self):
         self.port = None #None will automatically scan for Flashpro
         self.baud = 115200
-        self.timeout = 1 #In seconds
+        self.timeout_reg = 0.01 #In seconds
+        self.timeout_data = 2 #In seconds
         self.parity = serial.PARITY_ODD
 
         self.header = bytes.fromhex("DEAD")
@@ -22,7 +23,14 @@ class LuSEE_UART:
         self.rw_tries = 10
         self.resp_bytes = 100
         self.rawbytes = 0x1FFF
-        self.num_packets = 20
+        self.num_packets = 1
+
+        #Goes by power of 2. So avg of 7 is 2^7, or 128 averages
+        self.avg_main = 10
+        self.avg_notch = 6
+        #How many bits to shift up when taking product of two 32 bit numbers
+        self.mult_array = 0x1F
+        self.notch_en = 0x1
 
         if (self.port == None):
             self.get_connections()
@@ -46,8 +54,8 @@ class LuSEE_UART:
         print(f"Found {flashpro.manufacturer} {flashpro.product}")
         print(f"Using Port {self.port}")
 
-    def connect_usb(self):
-        self.connection = serial.Serial(port=self.port, baudrate=self.baud, parity=self.parity, timeout=self.timeout)
+    def connect_usb(self, timeout=1):
+        self.connection = serial.Serial(port=self.port, baudrate=self.baud, parity=self.parity, timeout=timeout)
         self.connection.flush()
         print("Connection Opened")
 
@@ -80,7 +88,6 @@ class LuSEE_UART:
                 print(f"ERROR: Failed to write {hex(val)} to register {hex(reg)}")
                 return
         print(f"Wrote {hex(val)} to Register {hex(reg)}")
-
     def read_reg(self, reg):
         if (reg < 0 or reg > 0xFFFF):
             print(f"Error: Register value {hex(reg)} out of range! Needs to be between 0x0 and 0xFFFF")
@@ -147,7 +154,8 @@ class LuSEE_UART:
 
     def readout_fifo(self):
         response = bytes()
-        for i in range(self.num_packets + 1):
+        for i in range(self.num_packets):
+            print("Reading new data out")
             new_data = self.connection.read(size = 0xFFFF)
             if (len(new_data) == 0):
                 print("Raw data buffer empty")
@@ -159,6 +167,7 @@ class LuSEE_UART:
         return response
 
     def initialize(self):
+        self.reset_FPGA()
         self.reset_ADC()
         self.reset_fifo()
 
@@ -242,14 +251,23 @@ class LuSEE_UART:
         unpacked_data.reverse()
         return unpacked_data
 
+    def setup_params(self):
+        luseeUart.write_reg(reg = 0x0B, val = self.avg_main, confirm = True)
+        luseeUart.write_reg(reg = 0x08, val = self.avg_notch, confirm = True)
+        luseeUart.write_reg(reg = 0x14, val = self.mult_array, confirm = True)
+        luseeUart.write_reg(reg = 0x16, val = self.mult_array, confirm = True)
+        luseeUart.write_reg(reg = 0x13, val = self.notch_en, confirm = True)
+
     def read_pfb_data(self):
-        self.reset_FPGA()
-        self.reset_fifo()
         luseeUart.write_reg(reg = 0x0A, val = 0x0322, confirm = True)
         luseeUart.write_reg(reg = 0x09, val = 0x0001, confirm = True)
         luseeUart.write_reg(reg = 0x04, val = 0x0006, confirm = True)
         luseeUart.write_reg(reg = 0x06, val = 0x0003, confirm = True)
+        #time.sleep(1)
+        luseeUart.close()
+        luseeUart.connect_usb(timeout = self.timeout_data)
         luseeUart.write_reg(reg = 0x04, val = 0x0001, confirm = False)
+
         raw_pfb_data = self.readout_fifo()
         pfb_data = self.format_pfb_data(raw_pfb_data)
         return pfb_data
@@ -260,8 +278,8 @@ class LuSEE_UART:
         x = []
         for i in range(len(data)):
             x.append(i / 2048 * 100 / 2)
-
-        title = "pfb_output"
+        notch_word = "off" if self.notch_en==0x0 else "on"
+        title = f"pfb_notch_{notch_word}_Navg_{2**self.avg_main}_Nnotch_{2**self.avg_notch}"
         fig.suptitle(title, fontsize = 20)
         yaxis = "counts"
         ax.set_ylabel(yaxis, fontsize=14)
@@ -271,22 +289,21 @@ class LuSEE_UART:
         ax.plot(x, data)
 #        print(x)
 #        print(y)
-#        ax.set_xlim([0,1])
+#        ax.set_xlim([0,2])
 
         plt.show()
         plot_path = os.path.join(os.getcwd(), "plots")
         if not (os.path.exists(plot_path)):
             os.makedirs(plot_path)
 
-        fig.savefig (os.path.join(plot_path, "plot.jpg"))
+        fig.savefig (os.path.join(plot_path, f"{title}.jpg"))
 
 if __name__ == "__main__":
     arg = sys.argv[1]
 
     luseeUart = LuSEE_UART()
-    luseeUart.connect_usb()
+    luseeUart.connect_usb(timeout = luseeUart.timeout_reg)
     luseeUart.initialize()
-
     if (arg == "raw"):
         raw_data = luseeUart.read_raw_data()
         luseeUart.close()
@@ -294,6 +311,7 @@ if __name__ == "__main__":
         luseeUart.plot(ch1)
         luseeUart.save_data(ch1)
     else:
+        luseeUart.setup_params()
         pfb_output = luseeUart.read_pfb_data()
         luseeUart.plot_pfb(pfb_output)
         luseeUart.save_data(pfb_output)
