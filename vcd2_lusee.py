@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#Script by Eric to take VCD output from Identify and convert certain signals to a text file to be simulated in VHDL
+#Script by Eric to take VCD output from Identify and convert certain signals to a CSV
 #The VCD format from Identify puts vectors on the same line instead of separately bit by bit
 #So the analysis is different here than the ModelSim VCD analyzers.
 #You tell it which signals to write to CSV through the command line
@@ -8,19 +8,17 @@ from vcd.reader import TokenKind, tokenize
 import numpy as np
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import csv
 
 class LuSEE_Integrated_Simulator:
     def __init__(self):
         print("Python --> Welcome to the LuSEE VCD Converter")
 
-        self.signals_of_interest = ['ch1_val_im', 'ch2_val_im', 'ch1_val_re', 'ch2_val_re', 'bin', 'fft_ready', 'sample1', 'sample2']
-        print("Python --> Reading config file")
-
-    def analyze_file(self, name):
-        if (not os.path.isfile(f"{name}.vcd")):
-            sys.exit(f"Python --> {name}.vcd does not exist")
+    def analyze_file(self, name, signals):
+        if (not os.path.isfile(f"{name}")):
+            sys.exit(f"Python --> {name} does not exist")
         else:
-            print(f"Python --> {name}.vcd found")
+            print(f"Python --> {name} found")
             self.name = name
             self.sensitivity_list = {}
             self.vals = {}
@@ -28,8 +26,10 @@ class LuSEE_Integrated_Simulator:
             self.time = 0
             self.prev_time = 0
             self.plot_num = 0
-            f = open(f"{name}.vcd", "rb")
+            f = open(f"{name}", "rb")
             self.tokens = tokenize(f)
+
+        self.signals_of_interest = signals
 
     def header(self):
         for num,i in enumerate(self.tokens):
@@ -44,6 +44,7 @@ class LuSEE_Integrated_Simulator:
             elif (i.kind is TokenKind.VAR):
                 id_code = i.var.id_code
                 reference = i.var.reference
+                num_bits = i.var.size
                 #Want to create signals that keep the arrays together.
                 if reference in self.signals_of_interest:
                     #First time a signal name is found. A key in the master list is made for it as a 1-bit value
@@ -51,6 +52,8 @@ class LuSEE_Integrated_Simulator:
                     val_in = {}
                     val_in['x'] = []
                     val_in['y'] = []
+                    val_in['size'] = num_bits
+                    val_in['prev'] = None
                     self.vals[reference] = val_in
 
                     new_sensitive_var = {}
@@ -59,18 +62,18 @@ class LuSEE_Integrated_Simulator:
 
             #The last line of the preamble/header
             elif (i.kind is TokenKind.ENDDEFINITIONS):
-                #print (self.vals)
+                print (self.vals)
                 #print (self.sensitivity_list)
+                self.names = list(self.sensitivity_list.values())
+                #print(self.names)
                 break
 
     def body(self, write_file = None):
-        if (write_file is not None):
-            #fft_ready_file = open("fft_ready.txt", "w")
-            #bin_file = open("bin.txt", "w")
-            #ch1_re_file = open("ch1_re.txt", "w")
-            #ch1_im_file = open("ch1_im.txt", "w")
-            sample1_file = open("sample1.txt", "w")
-            sample2_file = open("sample2.txt", "w")
+        f = open(write_file, "w")
+        writer = csv.writer(f, delimiter=',')
+        first_row = self.names.copy()
+        first_row.insert(0, 'time')
+        writer.writerow(first_row)
         for num,i in enumerate(self.tokens):
             #Unfortunately the only way to check these files is line by line as far as I can tell
             #If the time has changed, check for any values that may have changed in the previous time interval
@@ -82,25 +85,24 @@ class LuSEE_Integrated_Simulator:
                 #print(f"time is now {self.time}")
                 #for j in self.vals:
                 #    self.vals[j]['x'] = self.time
-                if (write_file is not None):
-                    if (self.prev_time%20 == 10):
-                        #fft_ready_file.write(f"{self.vals['fft_ready']['y'][-1]}" + "\n")
-                        #bin_file.write(f"{self.vals['bin']['y'][-1]:04x}" + "\n")
-                        #ch1_re_file.write(f"{self.vals['ch1_val_re']['y'][-1]:08x}" + "\n")
-                        #ch1_im_file.write(f"{self.vals['ch2_val_re']['y'][-1]:08x}" + "\n")
-                        sample1_file.write(f"{self.vals['sample1']['y'][-1]:08x}" + "\n")
-                        sample2_file.write(f"{self.vals['sample2']['y'][-1]:08x}" + "\n")
-
+                if ((self.prev_time%20 == 0) and (int(i.data) > 0)):
+                    next_row = [self.prev_time]
+                    for i in self.names:
+                        next_row.append(self.vals[i]['prev'])
+                    writer.writerow(next_row)
             #We're getting the full bit vector here, so we don't need to play the games with a different bit in every line
             elif (i.kind is TokenKind.CHANGE_VECTOR):
                 id_code = i.vector_change.id_code
                 if id_code in self.sensitivity_list:
                     signal = self.sensitivity_list[id_code]
                     value = i.vector_change.value
-                    converted = self.twos_comp(value, 32)
+                    num_bits = self.vals[signal]['size']
+                    converted = self.twos_comp(value, num_bits)
                     #print(converted)
+                    #print(f"{value} is {converted}")
                     self.vals[signal]['x'].append(self.time)
                     self.vals[signal]['y'].append(value)
+                    self.vals[signal]['prev'] = int(converted)
             #Each line after the time indicates a changed value. See if the changed value is one that is tracked
             elif (i.kind is TokenKind.CHANGE_SCALAR):
                 id_code = i.scalar_change.id_code
@@ -113,27 +115,19 @@ class LuSEE_Integrated_Simulator:
                         self.vals[signal]['y'].append(prev_value)
                     self.vals[signal]['x'].append(self.time)
                     self.vals[signal]['y'].append(int(value))
+                    self.vals[signal]['prev'] = int(value)
 
             elif (i.kind is TokenKind.DUMPOFF):
                 #For some reason with ModelSim, after you do a `vcd flush` to get the file to disk, it gives final values to every variable as "don't know" or X.
                 #So ignore everything after the `vcd flush` command
                 break
-
+        f.close()
         #After the file is done, add the last value as the final time tick
         #It helps with analysis later
-        print("vals")
-        for i in self.vals:
-            print(i)
-        #print(self.vals["fft_ready"])
-        #print(self.vals["bin_12"])
+        #print("vals")
+        #for i in self.vals:
+        #    print(i)
         print("Python --> Done with VCD body")
-        if (write_file is not None):
-            #fft_ready_file.close()
-            #bin_file.close()
-            #ch1_re_file.close()
-            #ch1_im_file.close()
-            sample1_file.close()
-            sample2_file.close()
 
     def plot(self):
         #Find where fft_ready goes from 0 to 1
@@ -191,10 +185,25 @@ class LuSEE_Integrated_Simulator:
         return val                         # return positive value as is
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        sys.exit(f"Error: You need to supply a config file and a unique name for this test as the 2 arguments! You had {len(sys.argv)-1} arguments!")
+    if len(sys.argv) < 3:
+        sys.exit(f"Error: You need to supply a VCD file, output csv file, and signals to track! You had {len(sys.argv)-1} arguments!")
+    vcd_file = sys.argv[1]
+    output_file = sys.argv[2]
+    error = 0
+    i = 3
+    track = []
+    while (error == 0):
+        try:
+            track.append(sys.argv[i])
+        except:
+            break
+        i += 1
+    print(f"Reading {vcd_file}")
+    print(f"Output file is {output_file}")
+    print(f"Signals to track are {track}")
+
     x = LuSEE_Integrated_Simulator()
-    x.analyze_file(sys.argv[1])
+    x.analyze_file(vcd_file, track)
     x.header()
-    x.body(write_file = sys.argv[2])
+    x.body(output_file)
     #x.plot()

@@ -77,8 +77,11 @@ class LuSEE_UART:
                     if (new_val != val):
                         print(f"Checked value is {hex(new_val)}, should be {hex(val)}")
                         i = i+1
-                        continue
-                break
+                        pass
+                    else:
+                        break
+                else:
+                    break
             except Exception as e:
                 print(e)
                 print(f"Write failed, retrying")
@@ -255,7 +258,7 @@ class LuSEE_UART:
         luseeUart.write_reg(reg = 0x0B, val = self.avg_main, confirm = True)
         luseeUart.write_reg(reg = 0x08, val = self.avg_notch, confirm = True)
         luseeUart.write_reg(reg = 0x14, val = self.mult_array, confirm = True)
-        luseeUart.write_reg(reg = 0x16, val = self.mult_array, confirm = True)
+        luseeUart.write_reg(reg = 0x17, val = self.mult_array, confirm = True)
         luseeUart.write_reg(reg = 0x13, val = self.notch_en, confirm = True)
 
     def read_pfb_data(self):
@@ -288,8 +291,10 @@ class LuSEE_UART:
         ax.ticklabel_format(style='plain', useOffset=False, axis='x')
         ax.plot(x, data)
 #        print(x)
+#        print(data)
+#        print(x)
 #        print(y)
-#        ax.set_xlim([0,2])
+#        ax.set_xlim([0,8])
 
         plt.show()
         plot_path = os.path.join(os.getcwd(), "plots")
@@ -304,12 +309,16 @@ if __name__ == "__main__":
     luseeUart = LuSEE_UART()
     luseeUart.connect_usb(timeout = luseeUart.timeout_reg)
     luseeUart.initialize()
+    time.sleep(1)
     if (arg == "raw"):
         raw_data = luseeUart.read_raw_data()
         luseeUart.close()
         ch1, ch2 = luseeUart.format_data(raw_data)
         luseeUart.plot(ch1)
         luseeUart.save_data(ch1)
+    elif(arg == "reg"):
+     for i in range(1,20,1):
+         print(f"Register {i} is {luseeUart.read_reg(i)}")
     else:
         luseeUart.setup_params()
         pfb_output = luseeUart.read_pfb_data()
