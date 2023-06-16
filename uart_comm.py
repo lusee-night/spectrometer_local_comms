@@ -31,6 +31,7 @@ class LuSEE_UART:
         #How many bits to shift up when taking product of two 32 bit numbers
         self.mult_array = 0x1F
         self.notch_en = 0x1
+        self.weight_fold_shift = 0xD
 
         if (self.port == None):
             self.get_connections()
@@ -260,9 +261,11 @@ class LuSEE_UART:
         luseeUart.write_reg(reg = 0x14, val = self.mult_array, confirm = True)
         luseeUart.write_reg(reg = 0x17, val = self.mult_array, confirm = True)
         luseeUart.write_reg(reg = 0x13, val = self.notch_en, confirm = True)
+        luseeUart.write_reg(reg = 0x12, val = self.weight_fold_shift, confirm = True)
 
     def read_pfb_data(self):
-        luseeUart.write_reg(reg = 0x0A, val = 0x0322, confirm = True)
+        luseeUart.write_reg(reg = 0x0E, val = 0x0000, confirm = True)
+        luseeUart.write_reg(reg = 0x0A, val = 0x0332, confirm = True)
         luseeUart.write_reg(reg = 0x09, val = 0x0001, confirm = True)
         luseeUart.write_reg(reg = 0x04, val = 0x0006, confirm = True)
         luseeUart.write_reg(reg = 0x06, val = 0x0003, confirm = True)
@@ -277,7 +280,7 @@ class LuSEE_UART:
 
     def plot_pfb(self, data):
         fig, ax = plt.subplots()
-
+        print(data)
         x = []
         for i in range(len(data)):
             x.append(i / 2048 * 100 / 2)
