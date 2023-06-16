@@ -14,6 +14,7 @@ class LuSEE_ETHERNET:
         self.FEMB_PORT_WREG = 32000
         self.FEMB_PORT_RREG = 32001
         self.FEMB_PORT_RREGRESP = 32002
+        self.PORT_HSDATA = 32003
         self.BUFFER_SIZE = 9014
 
         self.KEY1 = 0xDEAD
@@ -155,14 +156,98 @@ class LuSEE_ETHERNET:
         except TypeError:
             print (data)
 
+    def set_counter(self, num, function):
+        self.write_reg(5, int(num))
+        self.write_reg(6, int(function))
+
+    def reset_fifo(self):
+        self.write_reg(7, 1)
+        self.write_reg(7, 0)
+
+    def load(self):
+        self.write_reg(4, 6)
+        self.write_reg(4, 0)
+
+    def start(self):
+        self.write_reg(4, 1)
+        self.write_reg(4, 0)
+
+    def get_data_packets(self, data_type, num=1, header = False):
+        numVal = int(num)
+        if ((data_type != "int") and (data_type != "hex") and (data_type != "bin")):
+            print ("FEMB_UDP--> Error: Request packets as data_type = 'int', 'hex', or 'bin'")
+            return None
+
+        #set up IPv4, UDP listening socket at requested IP
+        sock_data = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock_data.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock_data.bind((self.PC_IP,self.PORT_HSDATA))
+        sock_data.settimeout(1)
+        self.start()
+        #Read a certain amount of packets
+        rawdataPackets = bytearray()
+        for packet in range(0,numVal,1):
+            data = []
+            try:
+                data = sock_data.recv(self.BUFFER_SIZE)
+            except socket.timeout:
+                    print ("FEMB_UDP--> Error get_data_packets: No data packet received from board, quitting")
+                    print ("FEMB_UDP--> Socket was {}".format(sock_data))
+                    return []
+            except OSError:
+                print ("FEMB_UDP--> Error accessing socket: No data packet received from board, quitting")
+                print ("FEMB_UDP--> Socket was {}".format(sock_data))
+                sock_data.close()
+                return []
+            if (data != None):
+                #If the user wants the header, keep those 16 bits in, or else don't
+                if (header != True):
+                    rawdataPackets += data[16:]
+                else:
+                    rawdataPackets += data
+
+        #print (sock_data.getsockname())
+        sock_data.close()
+
+        #If the user wanted straight up bytes, then return the bytearray
+        if (data_type == "bin"):
+            return rawdataPackets
+
+
+        buffer = (len(rawdataPackets))/2
+        #Unpacking into shorts in increments of 2 bytes
+        formatted_data = struct.unpack_from(">%dH"%buffer,rawdataPackets)
+
+        #If the user wants to display the data as a hex
+        if (data_type == "hex"):
+            hex_tuple = []
+            for i in range(len(formatted_data)):
+                hex_tuple.append(hex(formatted_data[i]))
+            return hex_tuple
+
+
+        return formatted_data
+
 if __name__ == "__main__":
     #arg = sys.argv[1]
 
 
     luseeEthernet = LuSEE_ETHERNET()
-    luseeEthernet.write_cdi_reg(5,69)
-    x = luseeEthernet.read_cdi_reg(5)
+    #luseeEthernet.write_cdi_reg(5,69)
+    #x = luseeEthernet.read_cdi_reg(5)
+    #print(x)
+    #luseeEthernet.write_reg(4,69)
+    #x = luseeEthernet.read_reg(4)
+    #print(x)
+    luseeEthernet.write_reg(0,1)
+    luseeEthernet.write_reg(0,0)
+    luseeEthernet.set_counter(0x850, 4)
+    time.sleep(0.1)
+    luseeEthernet.reset_fifo()
+    time.sleep(0.1)
+    luseeEthernet.load()
+    time.sleep(0.1)
+    #luseeEthernet.start()
+    x = luseeEthernet.get_data_packets("int", 1, True)
     print(x)
-    luseeEthernet.write_reg(4,69)
-    x = luseeEthernet.read_reg(4)
-    print(x)
+    print(len(x))
