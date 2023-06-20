@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 
 class LuSEE_UART:
     def __init__(self):
+        #If you're not receiving the large packets, run:
+        #sudo ifconfig <device name> mtu 9000
         self.port = None #None will automatically scan for Flashpro
         self.baud = 115200
         self.timeout_reg = 0.01 #In seconds

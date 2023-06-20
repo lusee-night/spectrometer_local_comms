@@ -10,6 +10,7 @@ class LuSEE_ETHERNET:
     def __init__(self):
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
+        self.udp_timeout = 1
 
         self.FEMB_PORT_WREG = 32000
         self.FEMB_PORT_RREG = 32001
@@ -21,12 +22,41 @@ class LuSEE_ETHERNET:
         self.KEY2 = 0xBEEF
         self.FOOTER = 0xFFFF
 
-        self.write_num = 0x2
-        self.latch_reg = 0x1
-        self.first_pack = 0xA20000
-        self.second_pack = 0xA30000
-        self.address_write = 0xA10000
+        self.wait_time = 0.01
+        self.latch_register = 0x1
+        self.write_register = 0x2
+        self.readback_register = 0xB
+        self.function_register = 0x6
+        self.counter_register = 0x5
+        self.reset_fifo_reg = 0x7
+        self.action_register = 0x4
+
+        self.cdi_reset = 0x0
+        self.spectrometer_reset = 0x0
+
         self.address_read = 0xA00000
+        self.address_write = 0xA10000
+        self.first_data_pack = 0xA20000
+        self.second_data_pack = 0xA30000
+
+    def reset(self):
+        print("Python Ethernet --> Resetting, wait a few seconds")
+        self.write_reg(self.spectrometer_reset,1)
+        time.sleep(3)
+        self.write_reg(self.spectrometer_reset,0)
+        time.sleep(1)
+        self.write_cdi_reg(self.cdi_reset,1)
+        time.sleep(3)
+        self.write_cdi_reg(self.cdi_reset,0)
+        time.sleep(1)
+        self.write_cdi_reg(self.latch_register, 0)
+        time.sleep(self.wait_time)
+
+    def toggle_cdi_latch(self):
+        self.write_cdi_reg(self.latch_register, 1)
+        time.sleep(self.wait_time)
+        self.write_cdi_reg(self.latch_register, 0)
+        time.sleep(self.wait_time)
 
     def write_reg(self, reg, data):
         regVal = int(reg)
@@ -35,33 +65,25 @@ class LuSEE_ETHERNET:
         dataValMSB = ((dataVal >> 16) & 0xFFFF)
         dataValLSB = dataVal & 0xFFFF
 
-        self.write_cdi_reg(self.latch_reg, 0)
-        first_value = self.first_pack + dataValMSB
-        self.write_cdi_reg(self.write_num, first_value)
+        dataMSB = self.first_data_pack + dataValMSB
+        self.write_cdi_reg(self.write_register, dataMSB)
+        self.toggle_cdi_latch()
 
-        self.write_cdi_reg(self.latch_reg, 1)
-        self.write_cdi_reg(self.latch_reg, 0)
-
-        second_value = self.second_pack + dataValLSB
-        self.write_cdi_reg(self.write_num, second_value)
-
-        self.write_cdi_reg(self.latch_reg, 1)
-        self.write_cdi_reg(self.latch_reg, 0)
+        dataLSB = self.second_data_pack + dataValLSB
+        self.write_cdi_reg(self.write_register, dataLSB)
+        self.toggle_cdi_latch()
 
         address_value = self.address_write + reg
-        self.write_cdi_reg(self.write_num, address_value)
-
-        self.write_cdi_reg(self.latch_reg, 1)
-        self.write_cdi_reg(self.latch_reg, 0)
+        self.write_cdi_reg(self.write_register, address_value)
+        self.toggle_cdi_latch()
 
     def read_reg(self, reg):
         address_value = self.address_read + reg
-        self.write_cdi_reg(self.write_num, address_value)
-        self.write_cdi_reg(self.latch_reg, 1)
-        self.write_cdi_reg(self.latch_reg, 0)
+        self.write_cdi_reg(self.write_register, address_value)
+        self.toggle_cdi_latch()
 
-        resp = self.read_cdi_reg(11)
-        return resp
+        resp = self.read_cdi_reg(self.readback_register)
+        return int(resp)
 
     def write_cdi_reg(self, reg, data):
         regVal = int(reg)
@@ -69,8 +91,6 @@ class LuSEE_ETHERNET:
         #Splits the register up, since both halves need to go through socket.htons seperately
         dataValMSB = ((dataVal >> 16) & 0xFFFF)
         dataValLSB = dataVal & 0xFFFF
-
-        #Organize packets as described in user manual
         WRITE_MESSAGE = struct.pack('HHHHHHHHH',socket.htons( self.KEY1  ), socket.htons( self.KEY2 ),
                                     socket.htons(regVal),socket.htons(dataValMSB),
                                     socket.htons(dataValLSB),socket.htons( self.FOOTER ), 0x0, 0x0, 0x0  )
@@ -81,13 +101,13 @@ class LuSEE_ETHERNET:
             sock_write.bind((self.PC_IP, 0))
         except:
             print("IP: {}".format(self.PC_IP))
-
         sock_write.sendto(WRITE_MESSAGE,(self.UDP_IP, self.FEMB_PORT_WREG ))
 
         #print ("Sent FEMB data from")
         #print (sock_write.getsockname())
         sock_write.close()
-        #print ("FEMB_UDP--> Write: reg=%x,value=%x"%(reg,data))
+        #print ("Python Ethernet --> Write: reg=%x,value=%x"%(reg,data))
+        #time.sleep(self.wait_time)
 
     #Read a full register from the FEMB FPGA.  Returns the 32 bits in an integer form
     def read_cdi_reg(self, reg):
@@ -97,22 +117,18 @@ class LuSEE_ETHERNET:
             sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
             sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
             sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP ))
-
-            sock_readresp.settimeout(.2)
+            sock_readresp.settimeout(self.udp_timeout)
 
             #First send a request to read out this sepecific register at the read request port for the board
             READ_MESSAGE = struct.pack('HHHHHHHHH',socket.htons(self.KEY1), socket.htons(self.KEY2),socket.htons(regVal),0,0,socket.htons(self.FOOTER),0,0,0)
             sock_read = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock_read.setblocking(0)
             sock_read.bind((self.PC_IP, 0))
-
             sock_read.sendto(READ_MESSAGE,(self.UDP_IP,self.FEMB_PORT_RREG))
 
             #print ("Sent read request from")
             #print (sock_read.getsockname())
-
             sock_read.close()
 
             #try to receive response packet from board, store in hex
@@ -121,24 +137,22 @@ class LuSEE_ETHERNET:
                     data = sock_readresp.recv(self.BUFFER_SIZE)
             except socket.timeout:
                 if (i > 9):
-                    print ("FEMB_UDP--> Error read_reg: No read packet received from board, quitting")
-                    print ("Waited for FEMB response on")
+                    print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
+                    print ("Waited for CDI response on")
                     print (sock_readresp.getsockname())
                     sock_readresp.close()
                     return None
                 else:
-                    print ("FEMB_UDP--> Didn't get a readback response, trying again...")
+                    print ("Python Ethernet --> Didn't get a readback response, trying again...")
 
             #print ("Waited for FEMB response on")
             #print (sock_readresp.getsockname())
             sock_readresp.close()
-
             if (data != []):
                 break
 
         #Goes from binary data to hexidecimal (because we know this is host order bits)
         dataHex = []
-        print(data)
         try:
             dataHex = binascii.hexlify(data)
             #If reading, say register 0x290, you may get back
@@ -146,7 +160,7 @@ class LuSEE_ETHERNET:
             #The first 4 bits are the register you requested, the next 8 bits are the value
             #Looks for those first 4 bits to make sure you read the register you're looking for
             if int(dataHex[0:4],16) != regVal :
-                print ("FEMB_UDP--> Error read_reg: Invalid response packet")
+                print ("Python Ethernet --> Error read_cdi_reg: Invalid response packet")
                 return None
 
             #Return the data part of the response in integer form (it's just easier)
@@ -154,100 +168,126 @@ class LuSEE_ETHERNET:
             #print ("FEMB_UDP--> Read: reg=%x,value=%x"%(reg,dataHexVal))
             return dataHexVal
         except TypeError:
-            print (data)
+            print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
 
-    def set_counter(self, num, function):
-        self.write_reg(5, int(num))
-        self.write_reg(6, int(function))
+    def set_function(self, function):
+        self.write_reg(self.function_register, int(function))
+        time.sleep(self.wait_time)
+
+    def set_counter_num(self, num):
+        self.write_reg(self.counter_register, int(num))
+        time.sleep(self.wait_time)
 
     def reset_fifo(self):
-        self.write_reg(7, 1)
-        self.write_reg(7, 0)
+        self.write_reg(self.reset_fifo_reg, 1)
+        time.sleep(self.wait_time)
+        self.write_reg(self.reset_fifo_reg, 0)
+        time.sleep(self.wait_time)
 
-    def load(self):
-        self.write_reg(4, 6)
-        self.write_reg(4, 0)
+    def load_fifo(self):
+        self.write_reg(self.action_register, 6)
+        time.sleep(self.wait_time)
+        self.write_reg(self.action_register, 0)
+        time.sleep(self.wait_time)
 
     def start(self):
-        self.write_reg(4, 1)
-        self.write_reg(4, 0)
+        self.write_reg(self.action_register, 1)
+        time.sleep(self.wait_time)
+        self.write_reg(self.action_register, 0)
 
-    def get_data_packets(self, data_type, num=1, header = False):
+    def get_data_packets(self, num=1, header = False):
         numVal = int(num)
-        if ((data_type != "int") and (data_type != "hex") and (data_type != "bin")):
-            print ("FEMB_UDP--> Error: Request packets as data_type = 'int', 'hex', or 'bin'")
-            return None
 
         #set up IPv4, UDP listening socket at requested IP
         sock_data = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock_data.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_data.bind((self.PC_IP,self.PORT_HSDATA))
-        sock_data.settimeout(1)
-        self.start()
+        sock_data.settimeout(self.udp_timeout)
         #Read a certain amount of packets
-        rawdataPackets = bytearray()
+        incoming_packets = []
+        self.start()
         for packet in range(0,numVal,1):
             data = []
             try:
                 data = sock_data.recv(self.BUFFER_SIZE)
             except socket.timeout:
-                    print ("FEMB_UDP--> Error get_data_packets: No data packet received from board, quitting")
-                    print ("FEMB_UDP--> Socket was {}".format(sock_data))
+                    print ("Python Ethernet --> Error get_data_packets: No data packet received from board, quitting")
+                    print ("Python Ethernet --> Socket was {}".format(sock_data))
                     return []
             except OSError:
-                print ("FEMB_UDP--> Error accessing socket: No data packet received from board, quitting")
-                print ("FEMB_UDP--> Socket was {}".format(sock_data))
+                print ("Python Ethernet --> Error accessing socket: No data packet received from board, quitting")
+                print ("Python Ethernet --> Socket was {}".format(sock_data))
                 sock_data.close()
                 return []
             if (data != None):
-                #If the user wants the header, keep those 16 bits in, or else don't
-                if (header != True):
-                    rawdataPackets += data[16:]
-                else:
-                    rawdataPackets += data
-
+                incoming_packets.append(data)
         #print (sock_data.getsockname())
         sock_data.close()
+        formatted_data, header_dict = self.check_data(incoming_packets)
+        if (header):
+            return formatted_data, header_dict
+        else:
+            return formatted_data
 
-        #If the user wanted straight up bytes, then return the bytearray
-        if (data_type == "bin"):
-            return rawdataPackets
+    def check_data(self, data):
+        udp_packet_count = 0
+        cdi_packet_count = 0
+        data_packet = []
+        header_dict = {}
+        for num,i in enumerate(data):
+            header_dict[f"{num}"] = {}
+            unpack_buffer = int((len(i))/2)
+            #Unpacking into shorts in increments of 2 bytes
+            formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
+            #print(formatted_data)
+            udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
+            header_dict[f"{num}"]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
+            header_dict[f"{num}"]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
+            header_dict[f"{num}"]["message_id"] = (formatted_data[8] >> 10)
+            message_length = (formatted_data[8] & 0x3FF)
+            if (message_length != 0x3fd):
+                message_length = (formatted_data[8] & 0x7FE) << 1
+            header_dict[f"{num}"]["message_spare"] = formatted_data[9]
+            header_dict[f"{num}"]["ccsds_version"] = formatted_data[10] >> 13
+            header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
+            header_dict[f"{num}"]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
+            header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
+            header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
+            ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
+            ccsds_packet_len = formatted_data[12] >> 1
 
+            data_packet.extend(formatted_data[13:])
+            if (udp_packet_count != 0):
+                if (udp_packet_num != (udp_packet_count + 1)):
+                    print("WARNING: Python Ethernet --> Previous UDP packet number was {udp_packet_count} and current UDP packet number is {udp_packet_num}")
 
-        buffer = (len(rawdataPackets))/2
-        #Unpacking into shorts in increments of 2 bytes
-        formatted_data = struct.unpack_from(">%dH"%buffer,rawdataPackets)
+            if (cdi_packet_count != 0):
+                if (ccsds_sequence_cnt != (cdi_packet_count + 1)):
+                    print("WARNING: Python Ethernet --> Previous CDI packet number was {cdi_packet_count} and current CDI packet number is {ccsds_sequence_cnt}")
 
-        #If the user wants to display the data as a hex
-        if (data_type == "hex"):
-            hex_tuple = []
-            for i in range(len(formatted_data)):
-                hex_tuple.append(hex(formatted_data[i]))
-            return hex_tuple
+            if (ccsds_packet_len != (2 * message_length)):
+                print(f"WARNING: Python Ethernet --> Packet lengths disagree. CCSDS packet length is {ccsds_packet_len} and message_length/rd_fifo_used is {message_length}")
 
+            added_packet_size = len(formatted_data[13:])
+            if (added_packet_size != ccsds_packet_len):
+                print(f"WARNING: Python Ethernet --> Packet header says that the payload should be {ccsds_packet_len} words, but it is {added_packet_size} words!")
 
-        return formatted_data
+            header_dict[f"{num}"]["udp_packet_num"] = udp_packet_num
+            header_dict[f"{num}"]["message_length"] = message_length
+            header_dict[f"{num}"]["ccsds_sequence_cnt"] = ccsds_sequence_cnt
+            header_dict[f"{num}"]["ccsds_packet_len"] = ccsds_packet_len
+
+        return data_packet, header_dict
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
-
-
     luseeEthernet = LuSEE_ETHERNET()
-    #luseeEthernet.write_cdi_reg(5,69)
-    #x = luseeEthernet.read_cdi_reg(5)
-    #print(x)
-    #luseeEthernet.write_reg(4,69)
-    #x = luseeEthernet.read_reg(4)
-    #print(x)
-    luseeEthernet.write_reg(0,1)
-    luseeEthernet.write_reg(0,0)
-    luseeEthernet.set_counter(0x850, 4)
-    time.sleep(0.1)
+    luseeEthernet.reset()
+    luseeEthernet.set_function(5)
+    luseeEthernet.set_counter_num(0x840)
     luseeEthernet.reset_fifo()
-    time.sleep(0.1)
-    luseeEthernet.load()
-    time.sleep(0.1)
-    #luseeEthernet.start()
-    x = luseeEthernet.get_data_packets("int", 1, True)
+    luseeEthernet.load_fifo()
+
+    x = luseeEthernet.get_data_packets(1, True)
     print(x)
     print(len(x))
