@@ -218,11 +218,11 @@ class LuSEE_COMMS:
                     print("LuSEE COMM --> No packet response, retrying...")
                     i += 1
 
-    def get_adc_data(self, header):
+    def get_adc_data(self, header=False):
         data = self.get_data(data_type = "adc", num=self.ADC_PACKETS, header = header)
         return data
 
-    def get_counter_data(self, header):
+    def get_counter_data(self, header=False):
         if (self.counter_num == None):
             print("LuSEE COMM --> You need to set the counter number before reading out the counter FIFO!")
             return
@@ -230,7 +230,7 @@ class LuSEE_COMMS:
         data = self.get_data(data_type = "adc", num=packets, header = header)
         return data
 
-    def get_pfb_data(self, header):
+    def get_pfb_data(self, header=False):
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
 

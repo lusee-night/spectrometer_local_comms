@@ -8,18 +8,32 @@ class LuSEE_MEASURE:
         self.comm = LuSEE_COMMS()
 
     def get_adc1_data(self):
-        self.comm.set_function("ADC1")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
+        self.comm.set_function("ADC1")
         data = self.comm.get_adc_data(header = False)
         return data
 
     def get_adc2_header_data(self):
-        self.comm.set_function("ADC2")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
+        self.comm.set_function("ADC2")
         data, header = self.comm.get_adc_data(header = True)
         return data, header
+
+    def get_adcs_sync(self):
+        self.comm.reset_all_fifos()
+        self.comm.load_adc_fifos()
+        self.comm.set_function("ADC1")
+        #With no argument, header defaults to 'False"
+        data1 = self.comm.get_adc_data()
+        self.comm.set_function("ADC2")
+        data2 = self.comm.get_adc_data()
+        self.comm.set_function("ADC3")
+        data3 = self.comm.get_adc_data()
+        self.comm.set_function("ADC4")
+        data4 = self.comm.get_adc_data()
+        return data1, data2, data3, data4
 
     def get_counter_data(self, counter_num):
         self.comm.set_function("Counter")
@@ -42,7 +56,7 @@ class LuSEE_MEASURE:
         self.comm.start_spectrometer()
         #Select which FFT to read out
         self.comm.select_fft("A1")
-        #Need to set these as well
+        #Need to set these as well for each FFT you read out
         self.comm.set_corr_array("A1", 0x1F)
         self.comm.set_notch_array("A1", 0x1F)
 
@@ -50,8 +64,6 @@ class LuSEE_MEASURE:
         self.comm.load_fft_fifos()
 
         x = self.comm.get_pfb_data(header = False)
-        print(x)
-        print(len(x))
         self.plot_fft(x)
 
     def plot_fft(self, data):
@@ -125,4 +137,8 @@ if __name__ == "__main__":
     print(c[0])
 
     d = measure.get_pfb_data()
+
+    e = measure.get_adcs_sync()
+    print(len(e))
+    print(e[2])
     #You can save/plot the output data however you wish!
