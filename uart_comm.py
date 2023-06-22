@@ -28,7 +28,7 @@ class LuSEE_UART:
         self.num_packets = 1
 
         #Goes by power of 2. So avg of 7 is 2^7, or 128 averages
-        self.avg_main = 10
+        self.avg_main = 12
         self.avg_notch = 6
         #How many bits to shift up when taking product of two 32 bit numbers
         self.mult_array = 0x1F
@@ -282,7 +282,7 @@ class LuSEE_UART:
 
     def plot_pfb(self, data):
         fig, ax = plt.subplots()
-        print(data)
+        #print(data)
         x = []
         for i in range(len(data)):
             x.append(i / 2048 * 100 / 2)

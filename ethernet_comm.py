@@ -4,7 +4,6 @@ import struct
 import csv
 import socket
 import binascii
-import matplotlib.pyplot as plt
 
 class LuSEE_ETHERNET:
     def __init__(self):
@@ -25,11 +24,8 @@ class LuSEE_ETHERNET:
         self.wait_time = 0.01
         self.latch_register = 0x1
         self.write_register = 0x2
-        self.readback_register = 0xB
-        self.function_register = 0x6
-        self.counter_register = 0x5
-        self.reset_fifo_reg = 0x7
         self.action_register = 0x4
+        self.readback_register = 0xB
 
         self.cdi_reset = 0x0
         self.spectrometer_reset = 0x0
@@ -170,34 +166,16 @@ class LuSEE_ETHERNET:
         except TypeError:
             print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
 
-    def set_function(self, function):
-        self.write_reg(self.function_register, int(function))
-        time.sleep(self.wait_time)
-
-    def set_counter_num(self, num):
-        self.write_reg(self.counter_register, int(num))
-        time.sleep(self.wait_time)
-
-    def reset_fifo(self):
-        self.write_reg(self.reset_fifo_reg, 1)
-        time.sleep(self.wait_time)
-        self.write_reg(self.reset_fifo_reg, 0)
-        time.sleep(self.wait_time)
-
-    def load_fifo(self):
-        self.write_reg(self.action_register, 6)
-        time.sleep(self.wait_time)
-        self.write_reg(self.action_register, 0)
-        time.sleep(self.wait_time)
-
     def start(self):
         self.write_reg(self.action_register, 1)
         time.sleep(self.wait_time)
         self.write_reg(self.action_register, 0)
 
-    def get_data_packets(self, num=1, header = False):
+    def get_data_packets(self, data_type, num=1, header = False):
+        if ((data_type != "adc") and (data_type != "fft")):
+            print(f"Python Ethernet --> Error in 'get_data_packets': Must request 'adc' or 'fft' as 'data_type'. You requested {data_type}")
+            return []
         numVal = int(num)
-
         #set up IPv4, UDP listening socket at requested IP
         sock_data = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock_data.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -223,22 +201,30 @@ class LuSEE_ETHERNET:
                 incoming_packets.append(data)
         #print (sock_data.getsockname())
         sock_data.close()
-        formatted_data, header_dict = self.check_data(incoming_packets)
+        formatted_data, header_dict = self.check_data(incoming_packets, data_type)
         if (header):
             return formatted_data, header_dict
         else:
             return formatted_data
 
-    def check_data(self, data):
+    def check_data(self, data, data_type):
         udp_packet_count = 0
         cdi_packet_count = 0
         data_packet = []
         header_dict = {}
+        #Packet format defined by Jack Fried in VHDL for custom CDI interface
+        #Headers come in as 16 bit words. ADC and counter payload comes in as 16 bit words
+        #FFT data comes in as 32 bit words. There are 13 header bytes. That's where the problem starts.
         for num,i in enumerate(data):
             header_dict[f"{num}"] = {}
-            unpack_buffer = int((len(i))/2)
-            #Unpacking into shorts in increments of 2 bytes
-            formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
+            if (data_type == "adc"):
+                unpack_buffer = int((len(i))/2)
+                #Unpacking into shorts in increments of 2 bytes
+                formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
+            elif (data_type == "fft"):
+                unpack_buffer = int((len(i))/4)
+                #Unpacking into shorts in increments of 2 bytes just for the header
+                formatted_data = struct.unpack_from(f">{unpack_buffer*2}H",i)
             #print(formatted_data)
             udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
             header_dict[f"{num}"]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
@@ -246,7 +232,10 @@ class LuSEE_ETHERNET:
             header_dict[f"{num}"]["message_id"] = (formatted_data[8] >> 10)
             message_length = (formatted_data[8] & 0x3FF)
             if (message_length != 0x3fd):
+                full_fifo = False
                 message_length = (formatted_data[8] & 0x7FE) << 1
+            else:
+                full_fifo = True
             header_dict[f"{num}"]["message_spare"] = formatted_data[9]
             header_dict[f"{num}"]["ccsds_version"] = formatted_data[10] >> 13
             header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
@@ -256,7 +245,25 @@ class LuSEE_ETHERNET:
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
             ccsds_packet_len = formatted_data[12] >> 1
 
-            data_packet.extend(formatted_data[13:])
+            if (data_type == "adc"):
+                added_packet_size = len(formatted_data[13:])
+                data_packet.extend(formatted_data[13:])
+            elif (data_type == "fft"):
+                #Header is 13 words of 16 bits each. That's 26 bytes.
+                #Once that is done, the data starts. So we want to start on the 27th byte
+                #The FFT comes in as 32 bit words.
+                #So for example a 4 sample packet would be -> 26 byte header, 4 byte sample, 4 byte sample, 4 byte sample = 38 bytes
+                #unpack_buffer would have been int(38/4) = 9. If we want to unpack those data samples as 32 bit ints,
+                #Then we need to subtract 6 from the buffer (it was really 6.5, but the unpack_buffer = int((len(i))/4) will always have a 0.5 that cancels)
+                #Now when we start at the 27th byte, we get just the data as 32 bit ints
+                formatted_data2 = struct.unpack_from(f">{unpack_buffer-6}I",i[26:])
+                added_packet_size = len(formatted_data2)*2
+                data_packet.extend(formatted_data2)
+
+            if (full_fifo):
+                #Because of the silly way Jack sends the message length, we need to double it if it was a full packet
+                message_length = 2 * message_length
+
             if (udp_packet_count != 0):
                 if (udp_packet_num != (udp_packet_count + 1)):
                     print("WARNING: Python Ethernet --> Previous UDP packet number was {udp_packet_count} and current UDP packet number is {udp_packet_num}")
@@ -265,12 +272,16 @@ class LuSEE_ETHERNET:
                 if (ccsds_sequence_cnt != (cdi_packet_count + 1)):
                     print("WARNING: Python Ethernet --> Previous CDI packet number was {cdi_packet_count} and current CDI packet number is {ccsds_sequence_cnt}")
 
-            if (ccsds_packet_len != (2 * message_length)):
-                print(f"WARNING: Python Ethernet --> Packet lengths disagree. CCSDS packet length is {ccsds_packet_len} and message_length/rd_fifo_used is {message_length}")
+            #if (ccsds_packet_len != (message_length)):
+                #print(f"WARNING: Python Ethernet --> Packet lengths disagree. CCSDS packet length is {ccsds_packet_len} and message_length/rd_fifo_used is {message_length}")
+                #print("Python Ethernet --> If this is annoying, remind Jack to fix this!")
+                #print(formatted_data[0:13])
+                #print(len(formatted_data[13:]))
 
-            added_packet_size = len(formatted_data[13:])
             if (added_packet_size != ccsds_packet_len):
                 print(f"WARNING: Python Ethernet --> Packet header says that the payload should be {ccsds_packet_len} words, but it is {added_packet_size} words!")
+                print(formatted_data[0:13])
+                print(len(formatted_data[13:]))
 
             header_dict[f"{num}"]["udp_packet_num"] = udp_packet_num
             header_dict[f"{num}"]["message_length"] = message_length
@@ -280,14 +291,5 @@ class LuSEE_ETHERNET:
         return data_packet, header_dict
 
 if __name__ == "__main__":
-    #arg = sys.argv[1]
+    arg = sys.argv[1]
     luseeEthernet = LuSEE_ETHERNET()
-    luseeEthernet.reset()
-    luseeEthernet.set_function(5)
-    luseeEthernet.set_counter_num(0x840)
-    luseeEthernet.reset_fifo()
-    luseeEthernet.load_fifo()
-
-    x = luseeEthernet.get_data_packets(1, True)
-    print(x)
-    print(len(x))
