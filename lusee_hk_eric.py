@@ -126,6 +126,12 @@ class LuSEE_HK:
     	    
     def convert_adc(self, val):
         return (val * 0.805644)/16
+
+    def convert_adc2(self, val):
+        part1 = val & 0xFF
+        part2 = val >> 8
+        total = (part1 << 8) + part2
+        return (total * 0.805644)/16
     	    
     # read HK data
     def read_hk_data(self):
