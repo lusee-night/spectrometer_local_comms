@@ -266,7 +266,7 @@ class LuSEE_UART:
         luseeUart.write_reg(reg = 0x12, val = self.weight_fold_shift, confirm = True)
 
     def read_pfb_data(self):
-        luseeUart.write_reg(reg = 0x0E, val = 0x0000, confirm = True)
+        luseeUart.write_reg(reg = 0x0E, val = 0x0001, confirm = True)
         luseeUart.write_reg(reg = 0x0A, val = 0x0332, confirm = True)
         luseeUart.write_reg(reg = 0x09, val = 0x0001, confirm = True)
         luseeUart.write_reg(reg = 0x04, val = 0x0006, confirm = True)

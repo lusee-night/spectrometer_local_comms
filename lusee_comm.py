@@ -5,12 +5,15 @@ class LuSEE_COMMS:
         self.connection = LuSEE_ETHERNET()
 
         self.readout_modes = {
-            "FFT": 0,
+            "FFT1": 0,
             "ADC1": 1,
             "ADC2": 2,
             "ADC3": 3,
             "ADC4": 4,
-            "Counter": 5
+            "Counter": 5,
+            "FFT2": 6,
+            "FFT3": 7,
+            "FFT4": 8
             }
 
         self.fft_sel = {
@@ -96,7 +99,7 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.spectrometer_status, 1)
 
     def stop_spectrometer(self):
-        self.connection.write_reg(self.spectrometer_status, 1)
+        self.connection.write_reg(self.spectrometer_status, 0)
 
     def select_fft(self, fft_style):
         try:

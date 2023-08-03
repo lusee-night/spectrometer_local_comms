@@ -40,11 +40,11 @@ class LuSEE_ETHERNET:
         self.write_reg(self.spectrometer_reset,1)
         time.sleep(3)
         self.write_reg(self.spectrometer_reset,0)
-        time.sleep(1)
+        time.sleep(2)
         self.write_cdi_reg(self.cdi_reset,1)
         time.sleep(3)
         self.write_cdi_reg(self.cdi_reset,0)
-        time.sleep(1)
+        time.sleep(2)
         self.write_cdi_reg(self.latch_register, 0)
         time.sleep(self.wait_time)
 
@@ -291,5 +291,7 @@ class LuSEE_ETHERNET:
         return data_packet, header_dict
 
 if __name__ == "__main__":
-    arg = sys.argv[1]
+    #arg = sys.argv[1]
     luseeEthernet = LuSEE_ETHERNET()
+
+    luseeEthernet.write_reg(9, 1)

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import os
+import time
 
 from lusee_comm import LuSEE_COMMS
 
@@ -43,7 +44,7 @@ class LuSEE_MEASURE:
 
     def get_pfb_data(self):
         #Need to set these
-        self.comm.set_function("FFT")
+        self.comm.set_function("FFT1")
         self.comm.set_main_average(8)
         self.comm.set_weight_fold_shift(0xD)
         self.comm.set_pfb_delays(0x332)
@@ -64,6 +65,7 @@ class LuSEE_MEASURE:
         self.comm.load_fft_fifos()
 
         x = self.comm.get_pfb_data(header = False)
+        print(x)
         self.plot_fft(x)
 
     def plot_fft(self, data):
@@ -127,18 +129,20 @@ class LuSEE_MEASURE:
 if __name__ == "__main__":
     #arg = sys.argv[1]
     measure = LuSEE_MEASURE()
-    x = measure.get_adc1_data()
-    measure.plot(measure.twos_comp(x, 14))
+    #measure.comm.reset()
+    # x = measure.get_adc1_data()
+    # measure.plot(measure.twos_comp(x, 14))
+    #
+    # a,b = measure.get_adc2_header_data()
+    # print(b)
+    #
+    # c = measure.get_counter_data(0x100)
+    # print(c[0])
 
-    a,b = measure.get_adc2_header_data()
-    print(b)
-
-    c = measure.get_counter_data(0x100)
-    print(c[0])
+    e = measure.get_adcs_sync()
+    measure.plot(measure.twos_comp(e[0], 14))
 
     d = measure.get_pfb_data()
 
-    e = measure.get_adcs_sync()
-    print(len(e))
-    print(e[2])
+
     #You can save/plot the output data however you wish!
