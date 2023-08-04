@@ -126,6 +126,9 @@ class LuSEE_MEASURE:
                 val = val - (1 << bits)        # compute negative value
             return val
 
+    def set_analog_mux(self, ch, in1, in2, gain):
+        result = self.comm.set_chan(ch, in1, in2, gain)
+
 if __name__ == "__main__":
     #arg = sys.argv[1]
     measure = LuSEE_MEASURE()
@@ -139,10 +142,11 @@ if __name__ == "__main__":
     # c = measure.get_counter_data(0x100)
     # print(c[0])
 
-    e = measure.get_adcs_sync()
-    measure.plot(measure.twos_comp(e[0], 14))
+    #e = measure.get_adcs_sync()
+    #measure.plot(measure.twos_comp(e[0], 14))
 
-    d = measure.get_pfb_data()
-
+    #d = measure.get_pfb_data()
+    f = measure.set_analog_mux(1, 0, 2, "high")
+    print(bin(f))
 
     #You can save/plot the output data however you wish!

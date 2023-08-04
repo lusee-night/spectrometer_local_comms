@@ -49,6 +49,7 @@ class LuSEE_COMMS:
         self.spectrometer_status = 0x9
         self.fft_select = 10
 
+        self.mux_reg = 20
         self.main_average = 21
         self.notch_average = 22
         self.weight_fold_shift = 23
@@ -236,6 +237,22 @@ class LuSEE_COMMS:
     def get_pfb_data(self, header=False):
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
+
+    def set_chan(self, ch, in1, in2, gain):
+        a = [None, None]
+        b = [None, None]
+        c = [None, None]
+        for num, i in enumerate([in1, in2]):
+            a[num] = 0 if (i == 2 or i == 0) else 1
+            b[num] = 0 if (i == 2 or i == 1) else 1
+            c[num] = 0 if (i <= 3 or i >= 0) else 1
+
+        gain_a = 1 if (gain == "low") else 0
+        gain_b = 1 if (gain == "high") else 0
+
+        mux_byte = (gain_b << 7) + (gain_a << 6) + (c[1] << 5) + (b[1] << 4) + (a[1] << 3) + (c[0] << 2) + (b[0] << 1) + a[0]
+        total_register = mux_byte << (ch*8)
+        self.connection.write_reg(self.mux_reg, total_register)
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
