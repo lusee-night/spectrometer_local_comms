@@ -1,14 +1,14 @@
-{"file": "twdl_11.vcd",
-"output": "TWDLROM_11",
+{"file": "twdl_3.vcd",
+"num": "3",
 "time_step": 100000,
 "signals":
-    {"twdl_11_1_re": {
+    {"twdl_3_1_re": {
         "Title": "Real"
         },
-    "twdl_11_1_im": {
+    "twdl_3_1_im": {
         "Title": "Imaginary"
         },
-    "twdl_11_1_vld": {
+    "twdl_3_1_vld": {
         "Title": "Valid"
         }
     }

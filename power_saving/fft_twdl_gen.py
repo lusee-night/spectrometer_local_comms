@@ -6,6 +6,7 @@ from vcd.reader import TokenKind, tokenize
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+import math
 
 class LuSEE_fft_gen:
     def __init__(self, config_file):
@@ -19,7 +20,7 @@ class LuSEE_fft_gen:
             listing['Title'] = self.json_data["signals"][i]['Title']
             self.signals_of_interest[i] = listing
         self.vcd_file = self.json_data["file"]
-        self.output = self.json_data["output"]
+        self.num = int(self.json_data["num"])
         self.time_step = self.json_data["time_step"]
 
     def analyze_file(self):
@@ -163,7 +164,49 @@ class LuSEE_fft_gen:
 
         print("Python --> Done with VCD body")
 
-    def elaborate_vals(self, start, next_index):
+    def write_file(self):
+        start, re_index, im_index = self.find_valid_start()
+        #print(re_index)
+        #print(im_index)
+        re, im = self.elaborate_vals(start, re_index, im_index)
+        resp = self.find_pattern(re["y"])
+        #print(resp)
+        #print(re["y"][:resp])
+        self.make_vhdl_file(re["y"], im["y"], resp)
+
+    def find_valid_start(self):
+        start = None
+        for i in self.json_data["signals"]:
+            #print(i)
+            title = (self.json_data["signals"][i]['Title'])
+            if (title == "Real"):
+                real = self.vals[i]
+            elif (title == "Imaginary"):
+                im = self.vals[i]
+            elif (title == "Valid"):
+                valid = self.vals[i]
+
+        for num, i in enumerate(valid["y"]):
+            if (i == 1):
+                #print(num)
+                start = valid["x"][num]
+                break
+
+        #print(start)
+        prev_i = 0
+        for i in real["x"]:
+            if (i > start):
+                re_index = real["x"].index(i)
+                break
+
+        for i in im["x"]:
+            if (i > start):
+                im_index = im["x"].index(i)
+                break
+
+        return start, re_index, im_index
+
+    def elaborate_vals(self, start, re_index, im_index):
         for signal in self.json_data["signals"]:
             desc = self.json_data["signals"][signal]['Title']
             if (desc == "Real" or desc == "Imaginary"):
@@ -171,12 +214,16 @@ class LuSEE_fft_gen:
                 value = []
                 prev_i = start
                 first = True
-                print(start)
-                print(next_index)
+                if (desc == "Real"):
+                    next_index = re_index
+                elif (desc == "Imaginary"):
+                    next_index = im_index
+                #print(self.vals[signal]['x'][:25])
+                #print(self.vals[signal]['y'][:25])
                 for num,i in enumerate(self.vals[signal]['x'][next_index:]):
-                    print("---------")
-                    print(num)
-                    print(i)
+                    num = num + next_index
+                    #print(num)
+                    #print(i)
                     if (i == prev_i):
                         time.append(i)
                         value.append(self.vals[signal]['y'][num])
@@ -188,50 +235,138 @@ class LuSEE_fft_gen:
                                 sys.exit(f"In iteration {num}, {i}, time step was {time_space}, {self.time_step}")
                             else:
                                 iterations = time_space // self.time_step
-                                for j in range(iterations-1):
-                                    time.append(prev_i + (j * self.time_step))
-                                    value.append(self.vals[signal]['y'][num+1])
+                                #The first time, there was no original appending of that value. For the subsequent times, the repeated value
+                                #Is posted once before we notice that there was a gap in time
+                                if (first):
+                                    first = False
+                                    for j in range(iterations):
+                                        time.append(prev_i + (j * self.time_step))
+                                        value.append(self.vals[signal]['y'][num-1])
+                                else:
+                                    for j in range(iterations-1):
+                                        time.append(prev_i + ((j+1) * self.time_step))
+                                        value.append(self.vals[signal]['y'][num-1])
 
-
+                                time.append(i)
+                                value.append(self.vals[signal]['y'][num])
 
                             prev_i = i
-
+                            #print(time)
+                            #print(value)
+                            #sys.exit("yo")
                         else:
                             time.append(i)
                             value.append(self.vals[signal]['y'][num])
                             prev_i = i
 
-                            print(time)
-                            print(value)
-                            sys.exit("hi")
+                if (desc == "Real"):
+                    real = {"x":time, "y":value}
+                elif (desc == "Imaginary"):
+                    im = {"x":time, "y":value}
 
-                print(time[0:25])
-                print(value[0:25])
-                sys.exit("here")
+        return real, im
 
+    def find_pattern(self, vals):
+        max_len = len(vals) / 2
+        for x in range(2, int(max_len)):
+            if (vals[0:x] == vals[x:2*x]) :
+                #Make sure it's not the beginning where all the values are the same
+                if (vals[0:x].count(vals[0]) != len(vals[0:x])):
+                    print(f"Python --> Matched with {vals[x:2*x]}")
+                    return x
 
-    def write_file(self):
-        start, next_index = self.find_valid_start()
-        self.elaborate_vals(start, next_index)
-        #resp = self.find_pattern()
-        print(self.vals["twdl_11_1_vld"])
+    def make_vhdl_file(self, re, im, index):
+        real_string = ""
+        for i in re[:index]:
+            real_string += f"x\"{i:08X}\", "
+        real_string = real_string[:-2]
 
-    def find_valid_start(self):
-        start = None
-        for num, i in enumerate(self.vals["twdl_11_1_vld"]["y"]):
-            if (i == 1):
-                #print(num)
-                start = self.vals["twdl_11_1_vld"]["x"][num]
-                break
-
-        #print(start)
-        prev_i = 0
-        for i in self.vals["twdl_11_1_re"]["x"]:
-            if (i > start):
-                next_index = self.vals["twdl_11_1_re"]["x"].index(i)
-                return start, next_index
+        im_string = ""
+        for i in im[:index]:
+            im_string += f"x\"{i:08X}\", "
+        im_string = im_string[:-2]
 
 
+        total_string = f"""
+--------------------------------------------------------------------------------
+-- Company: Brookhaven National Laboratory
+-- Eric Raguzin
+-- LuSEE
+-- Automatically generated Twiddle factor file based on Matlab output simulation
+--
+-- File: TWDLROM_{self.num}_1_array.vhd
+-- File history:
+--      <Revision number>: <Date>: <Comments>
+--      <Revision number>: <Date>: <Comments>
+--      <Revision number>: <Date>: <Comments>
+--
+-- Description:
+--
+-- This block was generated using a VCD file output from a simulation that was run by a Matlab generated FFT
+-- The Python script looked for the repeating twiddle factors that were outputs and condensed it to this VHDL block
+--
+--------------------------------------------------------------------------------
+
+library IEEE;
+USE ieee.std_logic_1164.all;
+USE ieee.std_logic_arith.all;
+USE ieee.std_logic_unsigned.all;
+
+entity TWDLROM_{self.num}_1_array is
+    PORT(   clk                               :   IN    std_logic;
+            reset                             :   IN    std_logic;
+            enb                               :   IN    std_logic;
+            dout_{self.num-1}_1_vld                     :   IN    std_logic;
+            softReset                         :   IN    std_logic;
+            twdl_{self.num}_1_re                      :   OUT   std_logic_vector(31 DOWNTO 0);  -- sfix32_En30
+            twdl_{self.num}_1_im                      :   OUT   std_logic_vector(31 DOWNTO 0);  -- sfix32_En30
+            twdl_{self.num}_1_vld                     :   OUT   std_logic
+            );
+end TWDLROM_{self.num}_1_array;
+
+architecture architecture_TWDLROM_{self.num}_1_array of TWDLROM_{self.num}_1_array is
+
+type TWDLROM_{self.num}_CONSTANTS is array (0 TO {index-1}) OF std_logic_vector(31 downto 0);
+
+constant TWDLROM_{self.num}_re : TWDLROM_{self.num}_CONSTANTS := ({real_string});
+
+constant TWDLROM_{self.num}_im : TWDLROM_{self.num}_CONSTANTS := ({im_string});
+
+
+SIGNAL Valid_s1          : std_logic;
+SIGNAL Valid_s2          : std_logic;
+SIGNAL index             : std_logic_vector({int(math.log2(index)-1)} downto 0);
+
+begin
+
+PROCESS (clk, reset)
+BEGIN
+    IF reset = '1' THEN
+        Valid_s1          <= '0';
+        Valid_s2          <= '0';
+        twdl_{self.num}_1_vld     <= '0';
+        twdl_{self.num}_1_re      <= x"00000000";
+        twdl_{self.num}_1_im      <= x"00000000";
+        index             <= x"0";
+    ELSIF clk'EVENT AND clk = '1' THEN
+        Valid_s1          <= dout_{self.num-1}_1_vld;
+        Valid_s2          <= Valid_s1;
+        twdl_{self.num}_1_re      <= TWDLROM_{self.num}_re(CONV_INTEGER(unsigned(index)));
+        twdl_{self.num}_1_im      <= TWDLROM_{self.num}_im(CONV_INTEGER(unsigned(index)));
+        twdl_{self.num}_1_vld     <= Valid_s2;
+        if(Valid_s2 = '1') then
+            index  <= index + 1;
+        end if;
+    END IF;
+END PROCESS;
+
+end architecture_TWDLROM_{self.num}_1_array;
+        """
+
+        with open(f"TWDLROM_{self.num}_1_array.vhd", "w") as text_file:
+            text_file.write(total_string)
+
+        print(total_string)
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -241,3 +376,4 @@ if __name__ == "__main__":
     x.header()
     x.body()
     x.write_file()
+    print("Python --> Done!")
