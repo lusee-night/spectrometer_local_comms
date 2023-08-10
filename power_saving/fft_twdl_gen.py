@@ -173,6 +173,17 @@ class LuSEE_fft_gen:
         #print(resp)
         #print(re["y"][:resp])
         self.make_vhdl_file(re["y"], im["y"], resp)
+        #self.find_repeats(re["y"], resp)
+
+    def find_repeats(self, values, count):
+        list_vals = []
+        for i in values[:count]:
+            num_in_list = values[:count].count(i)
+            list_vals.append(num_in_list)
+            if (num_in_list > 1 and num_in_list < 1000):
+                print(f"{i} is repeated {num_in_list} times")
+                print(hex(i))
+        print(f"Highest in list is {max(list_vals)}")
 
     def find_valid_start(self):
         start = None
