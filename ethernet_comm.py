@@ -258,7 +258,8 @@ class LuSEE_ETHERNET:
                 #Now when we start at the 27th byte, we get just the data as 32 bit ints
                 formatted_data2 = struct.unpack_from(f">{unpack_buffer-6}I",i[26:])
                 added_packet_size = len(formatted_data2)*2
-                data_packet.extend(formatted_data2)
+                formatted_data3 = [(i >> 16) + ((i & 0xFFFF) << 16) for i in formatted_data2]
+                data_packet.extend(formatted_data3)
 
             if (full_fifo):
                 #Because of the silly way Jack sends the message length, we need to double it if it was a full packet
@@ -266,11 +267,11 @@ class LuSEE_ETHERNET:
 
             if (udp_packet_count != 0):
                 if (udp_packet_num != (udp_packet_count + 1)):
-                    print("WARNING: Python Ethernet --> Previous UDP packet number was {udp_packet_count} and current UDP packet number is {udp_packet_num}")
+                    print(f"WARNING: Python Ethernet --> Previous UDP packet number was {udp_packet_count} and current UDP packet number is {udp_packet_num}")
 
             if (cdi_packet_count != 0):
                 if (ccsds_sequence_cnt != (cdi_packet_count + 1)):
-                    print("WARNING: Python Ethernet --> Previous CDI packet number was {cdi_packet_count} and current CDI packet number is {ccsds_sequence_cnt}")
+                    print(f"WARNING: Python Ethernet --> Previous CDI packet number was {cdi_packet_count} and current CDI packet number is {ccsds_sequence_cnt}")
 
             #if (ccsds_packet_len != (message_length)):
                 #print(f"WARNING: Python Ethernet --> Packet lengths disagree. CCSDS packet length is {ccsds_packet_len} and message_length/rd_fifo_used is {message_length}")

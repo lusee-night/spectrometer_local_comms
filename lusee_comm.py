@@ -1,3 +1,4 @@
+import time
 from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
@@ -41,7 +42,9 @@ class LuSEE_COMMS:
         self.bytes_per_packet = 0x7F8
         self.counter_num = None
 
-        self.wait_time = 0.01
+        self.wait_time = 0.025
+        self.adc_function = 0x2
+        self.adc_reg_data = 0x3
         self.action_register = 0x4
         self.counter_register = 0x5
         self.function_register = 0x6
@@ -69,6 +72,31 @@ class LuSEE_COMMS:
     #Takes a few seconds
     def reset(self):
         self.connection.reset()
+
+    def reset_adc(self, adc):
+        self.connection.write_reg(self.adc_function, 0x10 << int(adc))
+        self.connection.write_reg(self.adc_function, 0x0)
+
+    def write_adc(self, adc, reg, data):
+        print(f"Reg is {reg} and data is {hex(data)}")
+        val = data & 0xFF
+        reg_num = reg & 0xFF
+        final_val = reg_num + (val << 8)
+        print(f"sending {hex(final_val)}")
+        self.connection.write_reg(self.adc_reg_data, final_val)
+        print(f"reg 2 is {1 << int(adc)}")
+        time.sleep(self.wait_time)
+        self.connection.write_reg(self.adc_function, 1 << int(adc))
+        time.sleep(self.wait_time)
+        self.connection.write_reg(self.adc_function, 0)
+        time.sleep(self.wait_time)
+
+    def read_adc(self, adc, reg):
+        self.write_adc(adc, 0, 1)
+        self.write_adc(adc, reg, 0)
+        resp = self.connection.read_reg(self.adc_reg_data)
+        self.write_adc(adc, 0, 0)
+        return int(resp)
 
     def set_function(self, function):
         try:
@@ -247,12 +275,13 @@ class LuSEE_COMMS:
             b[num] = 0 if (i == 2 or i == 1) else 1
             c[num] = 0 if (i <= 3 or i >= 0) else 1
 
-        gain_a = 1 if (gain == "low") else 0
-        gain_b = 1 if (gain == "high") else 0
+        gain_a = 1 if (gain == "high") else 0
+        gain_b = 1 if (gain == "low") else 0
 
         mux_byte = (gain_b << 7) + (gain_a << 6) + (c[1] << 5) + (b[1] << 4) + (a[1] << 3) + (c[0] << 2) + (b[0] << 1) + a[0]
         total_register = mux_byte << (ch*8)
         self.connection.write_reg(self.mux_reg, total_register)
+        return total_register
 
 if __name__ == "__main__":
     #arg = sys.argv[1]

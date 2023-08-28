@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import os
 import time
+import sys
 
 from lusee_comm import LuSEE_COMMS
 
@@ -51,7 +52,7 @@ class LuSEE_MEASURE:
 
         #Notch not working yet
         self.comm.set_notch_average(6)
-        self.comm.notch_filter_off()
+        self.comm.notch_filter_on()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
@@ -65,7 +66,8 @@ class LuSEE_MEASURE:
         self.comm.load_fft_fifos()
 
         x = self.comm.get_pfb_data(header = False)
-        print(x)
+        y = [hex(i) for i in x]
+        print(y)
         self.plot_fft(x)
 
     def plot_fft(self, data):
@@ -128,11 +130,40 @@ class LuSEE_MEASURE:
 
     def set_analog_mux(self, ch, in1, in2, gain):
         result = self.comm.set_chan(ch, in1, in2, gain)
+        return result
 
 if __name__ == "__main__":
-    #arg = sys.argv[1]
+    if (len(sys.argv) > 1):
+        arg = sys.argv[1]
+    else:
+        arg = None
     measure = LuSEE_MEASURE()
-    #measure.comm.reset()
+    measure.comm.connection.write_cdi_reg(5, 69)
+    resp = measure.comm.connection.read_cdi_reg(5)
+    if (resp == 69):
+        print("[TEST]", "Communication to DCB Emulator is ok")
+    else:
+        sys.exit("[TEST]", "Communication to DCB Emulator is not ok")
+
+    measure = LuSEE_MEASURE()
+    measure.comm.connection.write_reg(5, 69)
+    resp = measure.comm.connection.read_reg(5)
+    if (resp == 69):
+        print("[TEST]", "Communication to Spectrometer Board is ok")
+    else:
+        sys.exit("[TEST]", "Communication to Spectrometer Board is not ok")
+
+    if (arg == "reset"):
+        measure.comm.reset()
+        measure.comm.reset_adc(adc = 0)
+
+    if (arg == "adc"):
+        measure.comm.reset_adc(adc = 0)
+        measure.comm.write_adc(adc = 0, reg = 0x25, data = 0xF4)
+        measure.comm.read_adc(adc = 0, reg = 0x25)
+        print(hex(resp))
+        print(hex(resp >> 16))
+
     # x = measure.get_adc1_data()
     # measure.plot(measure.twos_comp(x, 14))
     #
@@ -141,12 +172,19 @@ if __name__ == "__main__":
     #
     # c = measure.get_counter_data(0x100)
     # print(c[0])
-
-    #e = measure.get_adcs_sync()
-    #measure.plot(measure.twos_comp(e[0], 14))
-
+    #
+    # e = measure.get_adcs_sync()
+    # measure.plot(measure.twos_comp(e[0], 14))
+    #
     #d = measure.get_pfb_data()
-    f = measure.set_analog_mux(1, 0, 2, "high")
-    print(bin(f))
+
+    f = measure.set_analog_mux(0, 0, 4, "low")
+    print(f"Multiplexer array is {bin(f)}")
+
+    x = measure.get_adc1_data()
+    measure.plot(measure.twos_comp(x, 14))
+
+
+    d = measure.get_pfb_data()
 
     #You can save/plot the output data however you wish!

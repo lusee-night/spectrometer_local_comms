@@ -28,7 +28,7 @@ class LuSEE_UART:
         self.num_packets = 1
 
         #Goes by power of 2. So avg of 7 is 2^7, or 128 averages
-        self.avg_main = 12
+        self.avg_main = 24
         self.avg_notch = 6
         #How many bits to shift up when taking product of two 32 bit numbers
         self.mult_array = 0x1F
@@ -308,6 +308,12 @@ class LuSEE_UART:
 
         fig.savefig (os.path.join(plot_path, f"{title}.jpg"))
 
+    def log_registers(self):
+        reg_file = open("registers.txt", "w")
+        for i in range(1,43,1):
+            reg_file.write(f"Register {i} is {hex(luseeUart.read_reg(i))}\n")
+        reg_file.close()
+
 if __name__ == "__main__":
     arg = sys.argv[1]
 
@@ -322,8 +328,7 @@ if __name__ == "__main__":
         luseeUart.plot(ch1)
         luseeUart.save_data(ch1)
     elif(arg == "reg"):
-     for i in range(1,20,1):
-         print(f"Register {i} is {luseeUart.read_reg(i)}")
+     luseeUart.log_registers()
     else:
         luseeUart.setup_params()
         pfb_output = luseeUart.read_pfb_data()
