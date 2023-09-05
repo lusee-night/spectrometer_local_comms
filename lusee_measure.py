@@ -46,12 +46,12 @@ class LuSEE_MEASURE:
     def get_pfb_data(self):
         #Need to set these
         self.comm.set_function("FFT1")
-        self.comm.set_main_average(8)
+        self.comm.set_main_average(10)
         self.comm.set_weight_fold_shift(0xD)
         self.comm.set_pfb_delays(0x332)
 
         #Notch not working yet
-        self.comm.set_notch_average(6)
+        self.comm.set_notch_average(4)
         self.comm.notch_filter_on()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
@@ -132,6 +132,20 @@ class LuSEE_MEASURE:
         result = self.comm.set_chan(ch, in1, in2, gain)
         return result
 
+    def save_adc_for_simulation(self, data):
+        with open("output.txt", 'w') as the_file:
+            for i in data:
+                j = int(i)
+                #Convert's negative number to two's complement
+                if (j < 0):
+                    print(j)
+                    j = (16383 + 1 - abs(j))
+                    print(j)
+                    print(hex(j))
+                hex_str = f"{j:04x}"
+                print(hex_str)
+                the_file.write(f"{hex_str}\n")
+
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         arg = sys.argv[1]
@@ -145,7 +159,6 @@ if __name__ == "__main__":
     else:
         sys.exit("[TEST]", "Communication to DCB Emulator is not ok")
 
-    measure = LuSEE_MEASURE()
     measure.comm.connection.write_reg(5, 69)
     resp = measure.comm.connection.read_reg(5)
     if (resp == 69):
@@ -182,9 +195,12 @@ if __name__ == "__main__":
     print(f"Multiplexer array is {bin(f)}")
 
     x = measure.get_adc1_data()
+    print(x)
+    #measure.save_adc_for_simulation(x)
     measure.plot(measure.twos_comp(x, 14))
 
-
+    #measure.comm.stop_spectrometer()
+    #input("ready?")
     d = measure.get_pfb_data()
 
     #You can save/plot the output data however you wish!
