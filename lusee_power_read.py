@@ -5,6 +5,9 @@ import pandas as pd
 from lusee_hk_eric import LuSEE_HK
 from lusee_comm import LuSEE_COMMS
 
+#Current monitor
+#https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
+
 class POWER_TEST:
     def __init__(self, name, reg1_val, reg2_val, reg3_val):
         self.name = name
@@ -17,6 +20,19 @@ class LuSEE_POWER:
         self.hk = LuSEE_HK()
         self.comm = LuSEE_COMMS()
         self.name = name
+
+        self.ina_gain = 20
+
+        self.r75 = 1     #5VP
+        self.r74 = 1     #5VN
+        self.r73 = 0.390 #1.8VA
+        self.r72 = 0.390 #1.8VAD
+
+        self.r160 = 0.01 #1.0V
+        self.r161 = 0.01 #1.5V
+        self.r172 = 0.01 #1.8V
+        self.r175 = 0.01 #2.5V
+        self.r176 = 0.01 #3.3V
 
         self.delay = 5
 
@@ -137,6 +153,21 @@ class LuSEE_POWER:
                                "1.0VD Output Current":0x13
                                }
 
+        self.resistors      = {"+5V Output Current":1,
+                               "-5V Output Current":1,
+
+                               "1.8VA Output Current":0.390,
+                               "1.8VAD Output Current":0.390,
+
+                               "3.3VD Output Current":0.01,
+
+                               "2.5VD Output Current":0.01,
+                               "1.8VD Output Current":0.01,
+
+                               "1.5VD Output Current":0.01,
+                               "1.0VD Output Current":0.01
+                               }
+
         self.initial_df = ["FPGA 1V", "FPGA 1.5V", "FPGA 2.5V", "FPGA Temp"]
         key_list = list(self.configurations.keys())
         key_list_half = []
@@ -219,9 +250,16 @@ class LuSEE_POWER:
         for key,val in self.configurations.items():
             hk.write_i2c_mux(val)
             adc0, adc4, temp = hk.read_hk_data()
+            if "Current" in key:
+                ad0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
             running_list.extend([adc0, adc4])
 
         self.df[f"{name}"] = running_list
+
+    def convert_current(self, branch, val1, val2):
+        adc0 = (val1/self.ina_gain) / (self.resistors[branch])
+        adc4 = (val2/self.ina_gain) / (self.resistors[branch])
+        return adc0, adc4
 
 
 if __name__ == "__main__":
