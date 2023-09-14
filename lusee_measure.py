@@ -59,8 +59,8 @@ class LuSEE_MEASURE:
         #Select which FFT to read out
         self.comm.select_fft("A1")
         #Need to set these as well for each FFT you read out
-        self.comm.set_corr_array("A1", 0x1F)
-        self.comm.set_notch_array("A1", 0x1F)
+        self.comm.set_index_array("A1", 0x1F, "main")
+        self.comm.set_index_array("A1", 0x1F, "notch")
 
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()

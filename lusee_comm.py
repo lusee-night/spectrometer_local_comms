@@ -158,7 +158,7 @@ class LuSEE_COMMS:
     def notch_filter_off(self):
         self.connection.write_reg(self.notch_reg, 0)
 
-    def set_corr_array(self, fft, val):
+    def set_index_array(self, fft, val, index_type):
         try:
             fft_num = self.fft_sel[fft]
         except KeyError:
@@ -166,67 +166,115 @@ class LuSEE_COMMS:
             print(f"You inputted {fft}")
             return
 
-        val_num = int(val)
-        batch = fft_num // 6
-        position = fft_num % 6
-
-        if (batch == 0):
-            reg = self.corr_array1
-        elif (batch == 1):
-            reg = self.corr_array2
+        #Lets this function be reused for the main index and the correlator index, they just have different registers
+        if (index_type == "main"):
+            array1 = self.corr_array1
+            array2 = self.corr_array2
+            array3 = self.corr_array3
+        elif (index_type == "notch"):
+            array1 = self.notch_array1
+            array2 = self.notch_array2
+            array3 = self.notch_array3
         else:
-            reg = self.corr_array3
-
-        in_position = val_num << (5*position)
-        #print(f"in_position is {hex(in_position)}")
-        current_val = self.connection.read_reg(reg)
-        #print(f"current_val is {hex(current_val)}")
-        inverse_mask = 0x1F << (5*position)
-        #print(f"inverse_mask is {hex(inverse_mask)}")
-        inverse = ~inverse_mask
-        #print(f"inverse is {hex(inverse)}")
-        inverse_mask_applied = current_val | inverse_mask
-        #print(f"inverse_mask_applied is {hex(inverse_mask_applied)}")
-        remove_current = inverse & inverse_mask_applied
-        #print(f"remove_current is {hex(remove_current)}")
-        add_value = remove_current | in_position
-        #print(f"add_value is {hex(add_value)}")
-        self.connection.write_reg(reg, add_value)
-
-    def set_notch_array(self, fft, val):
-        try:
-            fft_num = self.fft_sel[fft]
-        except KeyError:
-            print(f"Python LuSEE Comm --> You need to use an FFT choice listed in {self.fft_sel}")
-            print(f"You inputted {fft}")
+            print("You need to supply this function with either 'main' or 'notch'")
+            print(f"Your argument was {index_type}")
             return
 
+        #Based on the position in the array, decide which batch of registers it falls in and which place within the register
         val_num = int(val)
-        batch = fft_num // 6
-        position = fft_num % 6
+        batch = fft_num // 5
+        position = fft_num % 5
 
-        if (batch == 0):
-            reg = self.notch_array1
-        elif (batch == 1):
-            reg = self.notch_array2
+        #Because there are offsets unique to each register (because the 6 bits don't cleanly map to 32 bit registers and we want to condense)
+        #Each batch has it's own bit offset, and higher batches have channel offsets
+        #Channel 15 is unique also with the modulo and floor division results
+        addition = 0
+        if (batch == 1):
+            addition = 4
+            position = position - 1
+        elif (batch == 2):
+            addition = 2
+            position = position - 1
+        elif (fft_num == 15):
+            batch = 2
+            addition = 2
+            position = 4
+
+        #Channels 5 and 10 straddle 2 different registers, so they have unique considerations when being split up
+        #between 2 registers with a different amount of bits in each one
+        if (fft_num == 5):
+            lower2bits_inposition = (val_num & 0x3) << 30
+            inverse_mask = 0xC0000000
+            resp = self.compute_index_send(lower2bits_inposition, inverse_mask, array1)
+
+            upper4bits_inposition = (val_num & 0x3C) >> 2
+            inverse_mask = 0xF
+            resp = self.compute_index_send(upper4bits_inposition, inverse_mask, array2)
+
+            return 0x12345678
+        elif (fft_num == 10):
+            lower4bits_inposition = (val_num & 0xF) << 28
+            inverse_mask = 0xF0000000
+            resp = self.compute_index_send(lower4bits_inposition, inverse_mask, array2)
+
+            upper2bits_inposition = (val_num & 0x30) >> 4
+            inverse_mask = 0x3
+            resp = self.compute_index_send(upper2bits_inposition, inverse_mask, array3)
+            return 0x9ABCDEF
+        #Regular channels now, getting mapped to one of three registers
         else:
-            reg = self.notch_array3
+            if (batch == 0):
+                reg = array1
+            elif (batch == 1):
+                reg = array2
+            else:
+                reg = array3
 
-        in_position = val_num << (5*position)
-        #print(f"in_position is {hex(in_position)}")
-        current_val = self.connection.read_reg(reg)
+            #Takes the value and places it within the 32 bit register where it belongs
+            in_position = val_num << ((6*position) + addition)
+            #print(f"in_position is {hex(in_position)}")
+            #Function requires a mask of all 1s in the same place
+            inverse_mask = 0x3F << ((6*position) + addition)
+            #print(f"inverse_mask is {hex(inverse_mask)}")
+            #This function computes the actual value to send and returns the results
+            resp = self.compute_index_send(in_position, inverse_mask, reg)
+            return resp
+
+    def compute_index_send(self, in_position, inverse_mask, register):
+        #Get the current value of the register from the FPGA for comparisons
+        current_val = self.connection.read_reg(register)
         #print(f"current_val is {hex(current_val)}")
-        inverse_mask = 0x1F << (5*position)
-        #print(f"inverse_mask is {hex(inverse_mask)}")
+
+        #Turn the mask of 1s in the spot where the data will be applied into the inverse
+        #So if you are putting 6 bits of data into the channel 2 spot, it will go from the inverse mask of
+        # 0000 0000 0000 00[11 1111] 0000 0000 0000 to:
+        # 1111 1111 1111 11[00 0000] 1111 1111 1111
         inverse = ~inverse_mask
         #print(f"inverse is {hex(inverse)}")
+
+        #Now we apply the current value on the FPGA as read by the register to the original inverse mask of mostly 0s
+        #So let's say the current vale was already 0xFF000000 and we are writing channel 2 like in the example above:
+        # 1111 1111 0000 00[11 1111] 0000 0000 0000
         inverse_mask_applied = current_val | inverse_mask
         #print(f"inverse_mask_applied is {hex(inverse_mask_applied)}")
+
+        #Then we AND this applied mask with the value to the inverse mask with mostly 0s. So we end up with
+        # 1111 1111 0000 00[00 0000] 0000 0000 0000
+        # We want this because it has the original register value untouched for channels outside of the one we want to write to
+        # And the channel we're writing to has been cleared to all 0s, so existing bits don't interfere.
         remove_current = inverse & inverse_mask_applied
         #print(f"remove_current is {hex(remove_current)}")
+
+        #Now we finall apply the actual value (which has already been shifted to the correct position)
+        #To the mask with original values but hollowed out to fit this new channel
+        #So for example, if the value is 001100 to be applied to channel 2, now we have the value of the 32 bit register to write back to the FPGA:
+        # 1111 1111 0000 00[00 1100] 0000 0000 0000
         add_value = remove_current | in_position
         #print(f"add_value is {hex(add_value)}")
-        self.connection.write_reg(reg, add_value)
+        #print(f"add_value is {bin(add_value)}")
+
+        self.connection.write_reg(register, add_value)
+        return add_value
 
     def set_pfb_delays(self, delay):
         delay_num = int(delay)
@@ -286,12 +334,7 @@ class LuSEE_COMMS:
 if __name__ == "__main__":
     #arg = sys.argv[1]
     ethernet = LuSEE_COMMS()
-    x = ethernet.get_adc1_data()
-    y = []
-    for i in x:
-        y.append(ethernet.twos_comp(i, 14))
-    #ethernet.plot(y)
-    #x,y = ethernet.get_adc2_header_data()
-    x,y = ethernet.get_counter_data(counter_num = 0x840)
-    print("Getting FFT")
-    ethernet.get_pfb_data()
+    resp = 0xAAAAAAAA
+    for num,i in enumerate(ethernet.fft_sel):
+        print(num)
+        resp = ethernet.set_corr_array(i, 0x3F, 0x0)

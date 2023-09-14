@@ -201,12 +201,15 @@ class LuSEE_POWER:
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
+        print("Setting up internal FPGA")
         self.hk.setup_fpga_internal()
+        print("Setting up I2C Mux")
         self.hk.init_i2c_mux()
+        print("Setting up I2C ADC")
         self.hk.init_i2c_adc()
 
         print(f"Started the spectrometer, waiting {self.delay} seconds for power to stabilize")
-        time.delay(self.delay)
+        time.sleep(self.delay)
 
         print("Taking power data")
         for i in self.tests:
@@ -243,13 +246,15 @@ class LuSEE_POWER:
     def power_sequence(self, name):
         print("Taking power data")
         bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
-        fpga_temp = hk.read_fpga_temp()
-        fpga_temp = "haha temp"
+        fpga_temp = self.hk.read_fpga_temp()
         running_list = [bank1v, bank1_8v, bank2_5v, fpga_temp]
         results = []
         for key,val in self.configurations.items():
-            hk.write_i2c_mux(val)
-            adc0, adc4, temp = hk.read_hk_data()
+            print(key)
+            resp = 1
+            while (readback != 0):
+                resp = self.hk.write_i2c_mux(val)
+            adc0, adc4, temp = self.hk.read_hk_data()
             if "Current" in key:
                 ad0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
             running_list.extend([adc0, adc4])

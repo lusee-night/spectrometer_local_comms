@@ -50,18 +50,20 @@ class LuSEE_HK:
         resp = self.read_i2c(self.hk_mux_dev, 0x2, 0x2)
         if (resp == val):
             print(f"I2C mux written to {resp:x}")
+            return 0
         else:
             print(f"Error: I2C mux was supposed to be written to {val:x}, but was read back as {resp:x}")
+            return 1
 
     def check_i2c_status(self):
         while True:
             val=self.connection.read_reg(self.i2c_status)
             if (((val>>31)&0x1)==1):
-                print ('Core busy')
-                time.sleep (0.01)
-            elif (((val>>30)&0x1)==1):
-                print ('Device Unavailable')
-                time.sleep (0.01)
+                print ('LuSEE_HK --> Core busy')
+                time.sleep (1.01)
+            # elif (((val>>30)&0x1)==1):
+            #     print ('LuSEE_HK --> Device Unavailable')
+            #     time.sleep (1.01)
             else:
                 break
 
