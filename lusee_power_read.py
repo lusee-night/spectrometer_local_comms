@@ -4,6 +4,7 @@ import pandas as pd
 
 from lusee_hk_eric import LuSEE_HK
 from lusee_comm import LuSEE_COMMS
+from lusee_measure import LuSEE_MEASURE
 
 #Current monitor
 #https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
@@ -22,6 +23,8 @@ class LuSEE_POWER:
         self.name = name
 
         self.ina_gain = 20
+        self.correct_m = 1.07
+        self.correct_b = 0.00872
 
         self.r75 = 1     #5VP
         self.r74 = 1     #5VN
@@ -133,7 +136,7 @@ class LuSEE_POWER:
                                "+5V Output Current":1,
                                "-5V Output Voltage":2,
                                "-5V Output Current":3,
-
+                               #
                                "1.8VA Output Voltage":4,
                                "1.8VA Output Current":5,
                                "1.8VAD Output Voltage":6,
@@ -141,12 +144,11 @@ class LuSEE_POWER:
 
                                "3.3VD Output Voltage":0xA,
                                "3.3VD Output Current":0xB,
-
                                "2.5VD Output Voltage":0xC,
                                "2.5VD Output Current":0xD,
+
                                "1.8VD Output Voltage":0xE,
                                "1.8VD Output Current":0xF,
-
                                "1.5VD Output Voltage":0x10,
                                "1.5VD Output Current":0x11,
                                "1.0VD Output Voltage":0x12,
@@ -168,15 +170,17 @@ class LuSEE_POWER:
                                "1.0VD Output Current":0.01
                                }
 
-        self.initial_df = ["FPGA 1V", "FPGA 1.5V", "FPGA 2.5V", "FPGA Temp"]
+        self.no_correct    = ["3.3VD Output Current", "2.5VD Output Current", "1.8VD Output Current", "1.5VD Output Current"]
+
+        self.initial_df = ["FPGA 1V", "FPGA 1.8V", "FPGA 2.5V", "FPGA Temp (Kelvin)"]
         key_list = list(self.configurations.keys())
-        key_list_half = []
-        for i in key_list:
-            key_list_half.append(i)
-            key_list_half.append(f"{i}_half")
-        self.initial_df.extend(key_list_half)
+        key_list_pwr = []
+        for num,i in enumerate(key_list):
+            key_list_pwr.append(i)
+            if ((num % 2) != 0):
+                key_list_pwr.append(f"Power")
+        self.initial_df.extend(key_list_pwr)
         self.df = pd.DataFrame(self.initial_df, columns=[f"{self.name}"])
-        #print(self.df)
 
     def sequence(self):
         self.comm.reset()
@@ -192,11 +196,12 @@ class LuSEE_POWER:
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
+
         #Select which FFT to read out
         self.comm.select_fft("A1")
         #Need to set these as well for each FFT you read out
-        self.comm.set_corr_array("A1", 0x1F)
-        self.comm.set_notch_array("A1", 0x1F)
+        self.comm.set_index_array("A1", 0x1F, "main")
+        self.comm.set_index_array("A1", 0x1F, "notch")
 
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
@@ -216,7 +221,22 @@ class LuSEE_POWER:
             self.prepare_test(i)
             self.power_sequence(i.name)
 
-        #self.df.to_excel(f"{self.name}.xlsx", index = False)
+        # for i in self.df:
+        #     print(i)
+        #     print(self.df[i])
+        #     print(type(self.df[i]))
+        #     print(self.df[i][4])
+        #     print(type(self.df[i][4]))
+        #
+        # v = None
+        # i = None
+        # p = None
+        # for key,val in self.configurations.items():
+        #     if ("Voltage" in key):
+        #         v = (self.df[self.name][key])
+        #     if ("Current" in key):
+        #         i = (self.df[self.name][key])
+        #         p = v * i
 
         # create a pandas.ExcelWriter object
         writer = pd.ExcelWriter(f"{self.name}.xlsx", engine='xlsxwriter')
@@ -248,16 +268,39 @@ class LuSEE_POWER:
         bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
         fpga_temp = self.hk.read_fpga_temp()
         running_list = [bank1v, bank1_8v, bank2_5v, fpga_temp]
+        print(f"1V is {bank1v}, 1.8V is {bank1_8v}, 2.5V is {bank2_5v}, temp is {fpga_temp}")
         results = []
         for key,val in self.configurations.items():
             print(key)
             resp = 1
-            while (readback != 0):
+            while (resp != 0):
                 resp = self.hk.write_i2c_mux(val)
             adc0, adc4, temp = self.hk.read_hk_data()
+            print(f"ADC0 is {adc0} and ADC4 {adc4}")
+            if (key not in self.no_correct):
+                adc0 = (self.correct_m * adc0) + self.correct_b
+                adc4 = (self.correct_m * adc4) + self.correct_b
+            print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
             if "Current" in key:
-                ad0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
-            running_list.extend([adc0, adc4])
+                adc0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
+                p = round(adc0 * prev_adc0, 3)
+            elif "+5V Output Voltage" in key:
+                adc0 = adc0 * 5
+                adc4 = adc4 * 5
+            elif "-5V Output Voltage" in key:
+                adc0 = adc0 * (4 + (1/6))
+                adc4 = adc4 * (4 + (1/6))
+
+            adc0 = round(adc0, 3)
+            adc4 = round(adc4, 3)
+            print(adc0, adc4)
+            print("\n")
+            prev_adc0 = adc0
+            prev_adc4 = adc4
+            if "Current" in key:
+                running_list.extend([adc0, p])
+            else:
+                running_list.extend([adc0])
 
         self.df[f"{name}"] = running_list
 
@@ -266,11 +309,71 @@ class LuSEE_POWER:
         adc4 = (val2/self.ina_gain) / (self.resistors[branch])
         return adc0, adc4
 
+    def test_power(self):
+        print("Testing power")
+        self.comm.connection.write_reg(self.SPE_notch_avg_disable, 0xFFFFFFFF)
+        self.comm.connection.write_reg(self.SPE_avg_disable, 0xFFFFFFFF)
+        self.comm.connection.write_reg(self.corr_disable, 0xFFFFFFFF)
+        self.comm.start_spectrometer()
+        input("We good?")
+
+
+    def test_function(self):
+        self.comm.stop_spectrometer()
+        print("Setting up internal FPGA")
+        self.hk.setup_fpga_internal()
+        print("Setting up I2C Mux")
+        self.hk.init_i2c_mux()
+        print("Setting up I2C ADC")
+        self.hk.init_i2c_adc()
+
+        for key,val in self.configurations.items():
+            print(key)
+            bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
+            fpga_temp = self.hk.read_fpga_temp()
+            print(f"1V is {bank1v}, 1.8V is {bank1_8v}, 2.5V is {bank2_5v}, temp is {fpga_temp}")
+
+            resp = self.hk.write_i2c_mux(val)
+            adc0, adc4, temp = self.hk.read_hk_data()
+            print(f"ADC0 is {adc0} and ADC4 {adc4}")
+            if (key not in self.no_correct):
+                adc0 = (self.correct_m * adc0) + self.correct_b
+                adc4 = (self.correct_m * adc4) + self.correct_b
+            print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
+            if "Current" in key:
+                adc0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
+            elif "+5V Output Voltage" in key:
+                adc0 = adc0 * 5
+                adc4 = adc4 * 5
+            elif "-5V Output Voltage" in key:
+                adc0 = adc0 * (4 + (1/6))
+                adc4 = adc4 * (4 + (1/6))
+
+            print(adc0, adc4)
+            print("\n")
 
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         name = sys.argv[1]
     else:
         name = "test"
+
+    measure = LuSEE_MEASURE()
+    measure.comm.connection.write_cdi_reg(5, 69)
+    resp = measure.comm.connection.read_cdi_reg(5)
+    if (resp == 69):
+        print("[TEST]", "Communication to DCB Emulator is ok")
+    else:
+        sys.exit("[TEST] -> Communication to DCB Emulator is not ok")
+
+    measure.comm.connection.write_reg(5, 69)
+    resp = measure.comm.connection.read_reg(5)
+    if (resp == 69):
+        print("[TEST]", "Communication to Spectrometer Board is ok")
+    else:
+        sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
+
     power = LuSEE_POWER(name)
     power.sequence()
+    #power.test_power()
+    #power.test_function()

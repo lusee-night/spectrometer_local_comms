@@ -42,7 +42,7 @@ class LuSEE_HK:
         #Sets continuous conversion mode, rather than low-power
         self.write_i2c(self.hk_adc_dev, 0x1, 0x7, 0x01)
         #Uses internal VREF and sets to ADC Mode 0, each channel is the direct input with temperature monitoring
-        self.write_i2c(self.hk_adc_dev, 0x1, 0xB, 0x00)
+        self.write_i2c(self.hk_adc_dev, 0x1, 0xB, 0x01)
 
     def write_i2c_mux(self, val):
         #Val is simply the 8 bit output of Port 0, bit 0 is P0_0 and so on
@@ -151,7 +151,10 @@ class LuSEE_HK:
         part1 = val & 0xFF
         total = ((val & 0xFF) << 8) + (val >> 8)
         #0.000625
-        return (total * 0.805644)/16
+        #Measured VREF is 3.323 V
+        #Bits is 4096
+        #Don't know why we divide by 16, for bit shift?
+        return (total * (3.323/4096))/16
 
     def read_hk_data(self):
         #Do a single shot conversion
@@ -161,6 +164,13 @@ class LuSEE_HK:
         self.write_i2c(self.hk_adc_dev, 0x0, 0x9, 0x00)
 
         adc_ch0 = self.read_i2c(self.hk_adc_dev, 0x2, 0x20)
+
+        #Do a single shot conversion
+        self.write_i2c(self.hk_adc_dev, 0x1, 0x9, 0x01)
+        time.sleep(0.025)
+        #Turn off single shot conversion
+        self.write_i2c(self.hk_adc_dev, 0x0, 0x9, 0x00)
+
         adc_ch4 = self.read_i2c(self.hk_adc_dev, 0x2, 0x24)
         temp = self.read_i2c(self.hk_adc_dev, 0x2, 0x27)
 
