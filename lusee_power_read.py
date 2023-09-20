@@ -9,6 +9,7 @@ from lusee_measure import LuSEE_MEASURE
 #Current monitor
 #https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
 
+#A class for each test so we can easily loop through them pick out these properties
 class POWER_TEST:
     def __init__(self, name, reg1_val, reg2_val, reg3_val):
         self.name = name
@@ -22,10 +23,14 @@ class LuSEE_POWER:
         self.comm = LuSEE_COMMS()
         self.name = name
 
+        #Gain of current monitor
         self.ina_gain = 20
+
+        #Correction for voltage losses through multiplexer chain
         self.correct_m = 1.07
         self.correct_b = 0.00872
 
+        #Resistor sizes for the current monitors for each branch
         self.r75 = 1     #5VP
         self.r74 = 1     #5VN
         self.r73 = 0.390 #1.8VA
@@ -37,8 +42,10 @@ class LuSEE_POWER:
         self.r175 = 0.01 #2.5V
         self.r176 = 0.01 #3.3V
 
+        #Wait this many seconds after changing power settings for stabilization
         self.delay = 5
 
+        #Various registers and disable bits for part of the spectrometer
         self.SPE_disable     = 40
         self.weight_streamer = 0b1
         self.weight_fold1    = 0b10
@@ -113,6 +120,8 @@ class LuSEE_POWER:
         self.corr_X34R       = 0x40000000
         self.corr_X34I       = 0x80000000
 
+        #Tests are run sequentially, the settings are applied, then power data is collected
+        #Each listing needs a name and what to set the 3 "disable spectrometer" registers to
         self.tests = []
         self.tests.append(POWER_TEST(name = "Everything on", reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
@@ -132,11 +141,13 @@ class LuSEE_POWER:
                                 reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4 + self.weight_streamer,
                                 reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
 
+        #When power data is collected, it happens in this order
+        #Each listing needs the value to set the multiplexer chain to to bring the reading to the HK ADC
         self.configurations = {"+5V Output Voltage":0,
                                "+5V Output Current":1,
                                "-5V Output Voltage":2,
                                "-5V Output Current":3,
-                               #
+
                                "1.8VA Output Voltage":4,
                                "1.8VA Output Current":5,
                                "1.8VAD Output Voltage":6,
@@ -155,46 +166,60 @@ class LuSEE_POWER:
                                "1.0VD Output Current":0x13
                                }
 
-        self.resistors      = {"+5V Output Current":1,
-                               "-5V Output Current":1,
+        #Needed to translate the ADC readings for the current configurations to actual current
+        self.resistors      = {"+5V Output Current": self.r75,
+                               "-5V Output Current": self.r74,
 
-                               "1.8VA Output Current":0.390,
-                               "1.8VAD Output Current":0.390,
+                               "1.8VA Output Current": self.r73,
+                               "1.8VAD Output Current": self.r72,
 
-                               "3.3VD Output Current":0.01,
+                               "3.3VD Output Current": self.r176,
 
-                               "2.5VD Output Current":0.01,
-                               "1.8VD Output Current":0.01,
+                               "2.5VD Output Current": self.r175,
+                               "1.8VD Output Current": self.r172,
 
-                               "1.5VD Output Current":0.01,
-                               "1.0VD Output Current":0.01
+                               "1.5VD Output Current": self.r161,
+                               "1.0VD Output Current": self.r160
                                }
 
+        #These are branches which usually have such low current that the "voltage correction" will do more harm than good
         self.no_correct    = ["3.3VD Output Current", "2.5VD Output Current", "1.8VD Output Current", "1.5VD Output Current"]
 
-        self.initial_df = ["FPGA 1V", "FPGA 1.8V", "FPGA 2.5V", "FPGA Temp (Kelvin)"]
+        #Laying out the first column so far
+        self.initial_df = ["Internal FPGA Voltages", "FPGA 1V", "FPGA 1.8V", "FPGA 2.5V", "FPGA Temp (Kelvin)", "", "PCB Measurements"]
         key_list = list(self.configurations.keys())
         key_list_pwr = []
+
+        #This assumes the tests come in batches of Voltage and then Current
+        #After current, it adds a row for the eventual power calculation
+        #And after every batch, it adds a spacer row before inserting the next batch
         for num,i in enumerate(key_list):
+            if ((num > 0) and ("Voltage" in i)):
+                key_list_pwr.append("")
             key_list_pwr.append(i)
-            if ((num % 2) != 0):
-                key_list_pwr.append(f"Power")
+            if ("Current" in i):
+                power_string = i.replace("Current", "Power (W)")
+                key_list_pwr.append(power_string)
+
+        #Adds the rest of that first colums with all these indicators for the rows
         self.initial_df.extend(key_list_pwr)
         self.df = pd.DataFrame(self.initial_df, columns=[f"{self.name}"])
 
     def sequence(self):
+        #Does the typical initialization of the FPGA for spectrometer usage
         self.comm.reset()
+        #Analog multiplexers connect channel 0 to input 0 with low gain
         self.comm.set_chan(0, 0, 4, "low")
 
+        #Spectrometer settings
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
         self.comm.set_weight_fold_shift(0xD)
         self.comm.set_pfb_delays(0x332)
-
         self.comm.set_notch_average(4)
         self.comm.notch_filter_on()
 
-        #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
+        #Runs the spectrometer. Components will be turned off through registers
         self.comm.start_spectrometer()
 
         #Select which FFT to read out
@@ -206,84 +231,136 @@ class LuSEE_POWER:
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
-        print("Setting up internal FPGA")
+        print("Setting up internal FPGA voltage readings")
         self.hk.setup_fpga_internal()
         print("Setting up I2C Mux")
         self.hk.init_i2c_mux()
         print("Setting up I2C ADC")
         self.hk.init_i2c_adc()
 
-        print(f"Started the spectrometer, waiting {self.delay} seconds for power to stabilize")
+        print(f"Started the spectrometer and PCB settings, waiting {self.delay} seconds for power to stabilize")
         time.sleep(self.delay)
 
         print("Taking power data")
+        #Will eventually need the name of the full row of columns in order to add rows later
+        #This accumulates them as the test goes on
+        all_indexes = [self.name]
+
+        #Each test sets the hardware configuration for it, and then conducts the measurements
         for i in self.tests:
             self.prepare_test(i)
             self.power_sequence(i.name)
+            all_indexes.append(i.name)
 
-        # for i in self.df:
-        #     print(i)
-        #     print(self.df[i])
-        #     print(type(self.df[i]))
-        #     print(self.df[i][4])
-        #     print(type(self.df[i][4]))
-        #
-        # v = None
-        # i = None
-        # p = None
-        # for key,val in self.configurations.items():
-        #     if ("Voltage" in key):
-        #         v = (self.df[self.name][key])
-        #     if ("Current" in key):
-        #         i = (self.df[self.name][key])
-        #         p = v * i
+        #print(all_indexes)
 
-        # create a pandas.ExcelWriter object
+        #Loop through the left most column with all the indicators and note where the "Power" columns are
+        power_columns = []
+        for num,i in enumerate(self.df[self.name]):
+            if ("Power" in i):
+                power_columns.append(num)
+
+        #When all the columns are in place, we want to calculate total power
+        #I initialize a row that will hold all the total power values
+        print("Calculating total power for each configuration")
+        power_row = ["Total Power (W)"]
+        for num,i in enumerate(self.df):
+            #The first column just has the indexes, no values
+            if (num > 0):
+                #From there just add up all the power values indicated in the column and add the total to the above row
+                total_power = 0
+                for j in power_columns:
+                    #print(j)
+                    total_power += self.df[i][j]
+                    #print(self.df[i][j])
+                #print(f"Total power for {self.df[i][0]}is {total_power}")
+                power_row.append(total_power)
+
+        #First create an empty row to space the new power row
+        empty_row = pd.Series([""] * len(all_indexes), index=all_indexes)
+        #Then the power row
+        power_row = pd.Series(power_row, index = all_indexes)
+        #And concatenate these new rows into the spreadsheet
+        self.df = pd.concat([self.df, pd.DataFrame([empty_row]), pd.DataFrame([power_row])], ignore_index = True)
+        #print(self.df)
+
+        #Create a pandas.ExcelWriter object
         writer = pd.ExcelWriter(f"{self.name}.xlsx", engine='xlsxwriter')
 
-        # write the data frame to Excel
+        #Write the data frame to Excel
         self.df.to_excel(writer, index=False, sheet_name='Sheet1')
 
-        # get the XlsxWriter workbook and worksheet objects
+        #Get the XlsxWriter workbook and worksheet objects
         workbook = writer.book
         worksheet = writer.sheets['Sheet1']
 
-        # adjust the column widths based on the content
+        #Adjust the column widths based on the content
         for i, col in enumerate(self.df.columns):
             width = max(self.df[col].apply(lambda x: len(str(x))).max(), len(col))
             worksheet.set_column(i, i, width)
 
-        # save the Excel file
+        #Save the Excel file
         writer._save()
+        print(f"Wrote {self.name}.xlsx")
 
+    #Just writes the registers that enable/disable parts of the spectrometer and waits for power to settle
     def prepare_test(self, test):
         print(f"Preparing test {test.name}")
         self.comm.connection.write_reg(self.SPE_notch_avg_disable, test.reg1_val)
         self.comm.connection.write_reg(self.SPE_avg_disable, test.reg2_val)
         self.comm.connection.write_reg(self.corr_disable, test.reg3_val)
         print(f"Waiting {self.delay} seconds for power to stabilize")
+        time.sleep(self.delay)
 
+    #Measures all the desired tests. The name argument is just the name of the configuration, "FFT off" for example
     def power_sequence(self, name):
-        print("Taking power data")
+        print(f"Taking power data for the {name} configuration\n")
+
+        #The internal measurements are quick, so I do them every time just to have them
         bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
         fpga_temp = self.hk.read_fpga_temp()
-        running_list = [bank1v, bank1_8v, bank2_5v, fpga_temp]
-        print(f"1V is {bank1v}, 1.8V is {bank1_8v}, 2.5V is {bank2_5v}, temp is {fpga_temp}")
-        results = []
+
+        #Resets the running list which will eventually be the full column that is appended to the spreadsheet.
+        #Has appropriate spaces to account for the labels on the first column
+        running_list = ["", round(bank1v/1000, 3), round(bank1_8v/1000, 3), round(bank2_5v/1000, 3), round(fpga_temp, 3), ""]
+        print(f"1V is {bank1v} mV, 1.8V is {bank1_8v} mV, 2.5V is {bank2_5v} mV, temp is {fpga_temp} Kelvin\n")
+
+        #Loops through all desired measurements, 3.3V branch, 1.8V branch, etc...
         for key,val in self.configurations.items():
-            print(key)
+            print(f"Measuring the {key} branch...")
+
+            #Assuming each batch starts with voltage, add the space before a new batch
+            if "Voltage" in key:
+                running_list.extend([""])
+
+            #A 0 means that the mux was confirmed to be written
+            #The write_i2c_mux will print an error and return a 1 if the readback is incorrect also
             resp = 1
             while (resp != 0):
                 resp = self.hk.write_i2c_mux(val)
+
+            #Once the mux is set, this reads the ADC which the mux is pointing to
+            #The ADC0 channel measures the voltage directly
+            #The ADC4 channel measures the voltage after going through a 1/2 voltage divider, anticipating having to read any higher voltages than the ADC reference
+            #temp is the ADC's internal temperature, probably not useful
             adc0, adc4, temp = self.hk.read_hk_data()
-            print(f"ADC0 is {adc0} and ADC4 {adc4}")
+            #print(f"ADC0 is {adc0} and ADC4 {adc4}")
+
+            #Most voltage/current branches need some correction because of the current drop across the mux chain
+            #If they're in the "no_correct" list this skips. Otherwise, it applies a rough y = mx+b correction I figured out empirically
             if (key not in self.no_correct):
                 adc0 = (self.correct_m * adc0) + self.correct_b
                 adc4 = (self.correct_m * adc4) + self.correct_b
-            print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
+                #print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
+
+            #The ADC just measures whatever voltage was at the input
+            #If we know we used the mux to redirect a current measurement from the INA901 chip, then we need to convert that voltage to the actual current
+            #Assuming that Current is measured after Voltage, for every current, I calculate the power from the two, using the previous ADC reading
             if "Current" in key:
                 adc0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
                 p = round(adc0 * prev_adc0, 3)
+
+            #+5V and -5V voltage measurements go through an op-amp divider, so they have a unique calculation to get the actual voltage
             elif "+5V Output Voltage" in key:
                 adc0 = adc0 * 5
                 adc4 = adc4 * 5
@@ -293,64 +370,30 @@ class LuSEE_POWER:
 
             adc0 = round(adc0, 3)
             adc4 = round(adc4, 3)
-            print(adc0, adc4)
-            print("\n")
+            print(f"ADC0 is {adc0} and ADC4 {adc4}\n")
+            #print("\n")
+            #Save the values in case this is a voltage that we want to multiply by the next current to get power
             prev_adc0 = adc0
             prev_adc4 = adc4
+
+            #If we did calculate power because it was a current add that to the column, if not, just the voltage
             if "Current" in key:
                 running_list.extend([adc0, p])
             else:
                 running_list.extend([adc0])
 
+        #With the full column, we can now add it to the Pandas Dataframe with the configuration title
+        #print(self.df)
+        #print(running_list)
         self.df[f"{name}"] = running_list
 
+    #The INA901 reads the voltage across a sense resistor to measure the current
+    #It has an internal gain of 20V/V, so first we get the actual voltage across the resistor
+    #Then we use the value of the resistor to get the actual current
     def convert_current(self, branch, val1, val2):
         adc0 = (val1/self.ina_gain) / (self.resistors[branch])
         adc4 = (val2/self.ina_gain) / (self.resistors[branch])
         return adc0, adc4
-
-    def test_power(self):
-        print("Testing power")
-        self.comm.connection.write_reg(self.SPE_notch_avg_disable, 0xFFFFFFFF)
-        self.comm.connection.write_reg(self.SPE_avg_disable, 0xFFFFFFFF)
-        self.comm.connection.write_reg(self.corr_disable, 0xFFFFFFFF)
-        self.comm.start_spectrometer()
-        input("We good?")
-
-
-    def test_function(self):
-        self.comm.stop_spectrometer()
-        print("Setting up internal FPGA")
-        self.hk.setup_fpga_internal()
-        print("Setting up I2C Mux")
-        self.hk.init_i2c_mux()
-        print("Setting up I2C ADC")
-        self.hk.init_i2c_adc()
-
-        for key,val in self.configurations.items():
-            print(key)
-            bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
-            fpga_temp = self.hk.read_fpga_temp()
-            print(f"1V is {bank1v}, 1.8V is {bank1_8v}, 2.5V is {bank2_5v}, temp is {fpga_temp}")
-
-            resp = self.hk.write_i2c_mux(val)
-            adc0, adc4, temp = self.hk.read_hk_data()
-            print(f"ADC0 is {adc0} and ADC4 {adc4}")
-            if (key not in self.no_correct):
-                adc0 = (self.correct_m * adc0) + self.correct_b
-                adc4 = (self.correct_m * adc4) + self.correct_b
-            print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
-            if "Current" in key:
-                adc0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
-            elif "+5V Output Voltage" in key:
-                adc0 = adc0 * 5
-                adc4 = adc4 * 5
-            elif "-5V Output Voltage" in key:
-                adc0 = adc0 * (4 + (1/6))
-                adc4 = adc4 * (4 + (1/6))
-
-            print(adc0, adc4)
-            print("\n")
 
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
@@ -375,5 +418,4 @@ if __name__ == "__main__":
 
     power = LuSEE_POWER(name)
     power.sequence()
-    #power.test_power()
-    #power.test_function()
+    print("Finished!")
