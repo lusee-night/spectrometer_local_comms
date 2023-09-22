@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
-import os, time, sys, socket
+import os, time, sys, socket, math
+import numpy as np
 
 #from lusee_common import LuSEE_COMMON
 from lusee_comm import LuSEE_COMMS
@@ -18,7 +19,23 @@ class LuSEE_HK:
         self.i2c_data    = 0x26
         self.i2c_status  = 0x27
 
-        self.hk_adc_conv    = 8.05644e-4
+        #Current monitor
+        #https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
+        #Gain of current monitor
+        self.ina_gain = 20
+
+        #Details for thermistor measurements
+        #According to schematics, the part is MC65F103A, Material Type F with R25 = 10000
+        #https://www.amphenol-sensors.com/hubfs/Documents/AAS-920-306C-NTC-Type-65-Series-031314-web.pdf
+        #https://www.amphenol-sensors.com/hubfs/Documents/AAS-913-318C-Temperature-resistance-curves-071816-web.pdf
+        self.thermistor_res = 10000
+        self.thermistor_voltage = 1.8
+        self.t_r25 = 10000
+        self.ratio_max = 68.6
+        self.temp_coefficients = {3.274: [3.3538646E-03, 2.5654090E-04, 1.9243889E-06, 1.0969244E-07],
+                                  0.36036: [3.3540154E-03, 2.5627725E-04, 2.0829210E-06, 7.3003206E-08],
+                                  0.06831: [3.3539264E-03, 2.5609446E-04, 1.9621987E-06, 4.6045930E-08],
+                                  0.01872: [3.3368620E-03, 2.4057263E-04, -2.6687093E-06, -4.0719355E-07]}
 
         #Device addresses for chips on the DB44 adapter board
         #https://www.nxp.com/docs/en/data-sheet/PCAL6416A.pdf
@@ -155,6 +172,44 @@ class LuSEE_HK:
         #Bits is 4096
         #Don't know why we divide by 16, for bit shift?
         return (total * (3.323/4096))/16
+
+    #The INA901 reads the voltage across a sense resistor to measure the current
+    #It has an internal gain of 20V/V, so first we get the actual voltage across the resistor
+    #Then we use the value of the resistor to get the actual current
+    def convert_current(self, resistance, val1, val2):
+        adc0 = (val1/self.ina_gain) / resistance
+        adc4 = (val2/self.ina_gain) / resistance
+        return adc0, adc4
+
+    #Convert the ADC voltage reading into a temperature
+    def convert_thermistor(self, val1, val2):
+        #Thermistor is read through a voltage divider, get the thermistor resistance
+        r_th = self.thermistor_res * (1/((self.thermistor_voltage/val1) - 1))
+        ratio = r_th/self.t_r25
+        #print(f"Input voltage was {val1} and thermistor resistance was {r_th} and ratio is {ratio}")
+        if (ratio > self.ratio_max):
+            print(f"Error: Thermistor ratio is {ratio} which is higher than the datasheet maximum")
+            return 0, 0
+        coefficients = None
+        for key, val in self.temp_coefficients.items():
+            #print(f"coefficients are {key}, {val}")
+            if (ratio > key):
+                coefficients = val
+                break
+        if (coefficients == None):
+            print(f"Error: Thermistor ratio is {ratio} which is lower than the datasheet minimum")
+            return 0, 0
+
+        #print(f"coefficients are {coefficients}")
+        a = coefficients[0]
+        b = coefficients[1]
+        c = coefficients[2]
+        d = coefficients[3]
+
+        term = a + b * (np.log(ratio)) + c * (np.log(ratio) ** 2) + d * (np.log(ratio) ** 3)
+        print(f"Temperature calculated as {1/term}")
+
+        return int(1/term), 0
 
     def read_hk_data(self):
         #Do a single shot conversion

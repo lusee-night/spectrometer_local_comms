@@ -6,9 +6,6 @@ from lusee_hk_eric import LuSEE_HK
 from lusee_comm import LuSEE_COMMS
 from lusee_measure import LuSEE_MEASURE
 
-#Current monitor
-#https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
-
 #A class for each test so we can easily loop through them pick out these properties
 class POWER_TEST:
     def __init__(self, name, reg1_val, reg2_val, reg3_val):
@@ -22,13 +19,21 @@ class LuSEE_POWER:
         self.hk = LuSEE_HK()
         self.comm = LuSEE_COMMS()
         self.name = name
+        
+        #Input voltages on cable, used for LDO power consumption
+        self.cable_5p  = 5.5
+        self.cable_5n  = -5.5
+        self.cable_3_3 = 3.6
+        self.cable_2_5 = 3.6
+        self.cable_1_8 = 2.3
+        self.cable_1_5 = 2.3
+        self.cable_1_0 = 1.5
 
-        #Gain of current monitor
-        self.ina_gain = 20
+
 
         #Correction for voltage losses through multiplexer chain
-        self.correct_m = 1.07
-        self.correct_b = 0.00872
+        self.correct_m = 1.035
+        self.correct_b = 0.00872 / 2
 
         #Resistor sizes for the current monitors for each branch
         self.r75 = 1     #5VP
@@ -143,7 +148,12 @@ class LuSEE_POWER:
 
         #When power data is collected, it happens in this order
         #Each listing needs the value to set the multiplexer chain to to bring the reading to the HK ADC
-        self.configurations = {"+5V Output Voltage":0,
+        self.configurations = {
+                               "FPGA Thermistor (Kelvin)":0x14,
+                               "ADC0 Thermistor (Kelvin)":0x15,
+                               "ADC1 Thermistor (Kelvin)":0x16,
+
+                               "+5V Output Voltage":0,
                                "+5V Output Current":1,
                                "-5V Output Voltage":2,
                                "-5V Output Current":3,
@@ -163,7 +173,7 @@ class LuSEE_POWER:
                                "1.5VD Output Voltage":0x10,
                                "1.5VD Output Current":0x11,
                                "1.0VD Output Voltage":0x12,
-                               "1.0VD Output Current":0x13
+                               "1.0VD Output Current":0x13,
                                }
 
         #Needed to translate the ADC readings for the current configurations to actual current
@@ -200,6 +210,8 @@ class LuSEE_POWER:
             if ("Current" in i):
                 power_string = i.replace("Current", "Power (W)")
                 key_list_pwr.append(power_string)
+                cable_voltage = self.get_cable_voltage(branch = i)
+                key_list_pwr.append(f"Dissipation through {cable_voltage} LDO input")
 
         #Adds the rest of that first colums with all these indicators for the rows
         self.initial_df.extend(key_list_pwr)
@@ -256,32 +268,41 @@ class LuSEE_POWER:
 
         #Loop through the left most column with all the indicators and note where the "Power" columns are
         power_columns = []
+        ldo_columns = []
         for num,i in enumerate(self.df[self.name]):
             if ("Power" in i):
                 power_columns.append(num)
+            elif ("LDO" in i):
+                ldo_columns.append(num)
 
         #When all the columns are in place, we want to calculate total power
         #I initialize a row that will hold all the total power values
         print("Calculating total power for each configuration")
-        power_row = ["Total Power (W)"]
+        power_row = ["Total PCB Power (W)"]
+        total_row = ["Total Power with LDO dissipation (W)"]
         for num,i in enumerate(self.df):
             #The first column just has the indexes, no values
             if (num > 0):
                 #From there just add up all the power values indicated in the column and add the total to the above row
                 total_power = 0
+                total_ldo_power = 0
                 for j in power_columns:
                     #print(j)
                     total_power += self.df[i][j]
                     #print(self.df[i][j])
+                for j in ldo_columns:
+                    total_ldo_power += self.df[i][j]
                 #print(f"Total power for {self.df[i][0]}is {total_power}")
                 power_row.append(total_power)
+                total_row.append(total_ldo_power + total_power)
 
         #First create an empty row to space the new power row
         empty_row = pd.Series([""] * len(all_indexes), index=all_indexes)
         #Then the power row
-        power_row = pd.Series(power_row, index = all_indexes)
+        power_df = pd.Series(power_row, index = all_indexes)
+        total_df = pd.Series(total_row, index = all_indexes)
         #And concatenate these new rows into the spreadsheet
-        self.df = pd.concat([self.df, pd.DataFrame([empty_row]), pd.DataFrame([power_row])], ignore_index = True)
+        self.df = pd.concat([self.df, pd.DataFrame([empty_row]), pd.DataFrame([power_df]), pd.DataFrame([total_df])], ignore_index = True)
         #print(self.df)
 
         #Create a pandas.ExcelWriter object
@@ -318,7 +339,7 @@ class LuSEE_POWER:
 
         #The internal measurements are quick, so I do them every time just to have them
         bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
-        fpga_temp = self.hk.read_fpga_temp()
+        fpga_temp = int(self.hk.read_fpga_temp())
 
         #Resets the running list which will eventually be the full column that is appended to the spreadsheet.
         #Has appropriate spaces to account for the labels on the first column
@@ -330,7 +351,7 @@ class LuSEE_POWER:
             print(f"Measuring the {key} branch...")
 
             #Assuming each batch starts with voltage, add the space before a new batch
-            if "Voltage" in key:
+            if "Voltage" in key or "FPGA Thermistor" in key:
                 running_list.extend([""])
 
             #A 0 means that the mux was confirmed to be written
@@ -348,25 +369,32 @@ class LuSEE_POWER:
 
             #Most voltage/current branches need some correction because of the current drop across the mux chain
             #If they're in the "no_correct" list this skips. Otherwise, it applies a rough y = mx+b correction I figured out empirically
-            if (key not in self.no_correct):
-                adc0 = (self.correct_m * adc0) + self.correct_b
-                adc4 = (self.correct_m * adc4) + self.correct_b
-                #print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
+            # if (key not in self.no_correct):
+            #     adc0 = (self.correct_m * adc0) + self.correct_b
+            #     adc4 = (self.correct_m * adc4) + self.correct_b
+            #     #print(f"Corrected ADC0 is {adc0} and ADC4 {adc4}")
 
             #The ADC just measures whatever voltage was at the input
             #If we know we used the mux to redirect a current measurement from the INA901 chip, then we need to convert that voltage to the actual current
             #Assuming that Current is measured after Voltage, for every current, I calculate the power from the two, using the previous ADC reading
+            #Use absolute value with prev_adc0 because it could be negative for the -5.5V branch
             if "Current" in key:
-                adc0, adc4 = self.convert_current(branch = key, val1 = adc0, val2 = adc4)
-                p = round(adc0 * prev_adc0, 3)
+                adc0, adc4 = self.hk.convert_current(resistance = self.resistors[key], val1 = adc0, val2 = adc4)
+                p = round(adc0 * abs(prev_adc0), 3)
+                cable_voltage = self.get_cable_voltage(branch = key)
+                print(f"cable voltage is {cable_voltage} and voltage was {prev_adc0} and this current is {adc0}")
+                p_ldo = round(abs(cable_voltage - prev_adc0) * adc0, 3)
 
             #+5V and -5V voltage measurements go through an op-amp divider, so they have a unique calculation to get the actual voltage
             elif "+5V Output Voltage" in key:
                 adc0 = adc0 * 5
                 adc4 = adc4 * 5
             elif "-5V Output Voltage" in key:
-                adc0 = adc0 * (4 + (1/6))
-                adc4 = adc4 * (4 + (1/6))
+                adc0 = adc0 * -1 * (4 + (1/6))
+                adc4 = adc4 * -1 * (4 + (1/6))
+
+            elif "Thermistor" in key:
+                adc0, adc4 = self.hk.convert_thermistor(adc0, adc4)
 
             adc0 = round(adc0, 3)
             adc4 = round(adc4, 3)
@@ -378,7 +406,7 @@ class LuSEE_POWER:
 
             #If we did calculate power because it was a current add that to the column, if not, just the voltage
             if "Current" in key:
-                running_list.extend([adc0, p])
+                running_list.extend([adc0, p, p_ldo])
             else:
                 running_list.extend([adc0])
 
@@ -386,6 +414,31 @@ class LuSEE_POWER:
         #print(self.df)
         #print(running_list)
         self.df[f"{name}"] = running_list
+        
+    def get_cable_voltage(self, branch):
+        cable_voltage = None
+        if (branch == "+5V Output Current"):
+            cable_voltage = self.cable_5p
+        elif (branch == "-5V Output Current"):
+            cable_voltage = self.cable_5n
+        elif (branch == "3.3VD Output Current"):
+            cable_voltage = self.cable_3_3
+        elif (branch == "2.5VD Output Current"):
+            cable_voltage = self.cable_2_5
+        elif (branch == "1.8VA Output Current"):
+            cable_voltage = self.cable_1_8
+        elif (branch == "1.8VD Output Current"):
+            cable_voltage = self.cable_1_8
+        elif (branch == "1.8VAD Output Current"):
+            cable_voltage = self.cable_1_8
+        elif (branch == "1.5VD Output Current"):
+            cable_voltage = self.cable_1_5
+        elif (branch == "1.0VD Output Current"):
+            cable_voltage = self.cable_1_0
+        else:
+            print(f"Error, branch string is given as {branch} which does not exist in the table")
+            return 0
+        return cable_voltage
 
     #The INA901 reads the voltage across a sense resistor to measure the current
     #It has an internal gain of 20V/V, so first we get the actual voltage across the resistor
