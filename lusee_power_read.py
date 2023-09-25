@@ -211,7 +211,7 @@ class LuSEE_POWER:
                 power_string = i.replace("Current", "Power (W)")
                 key_list_pwr.append(power_string)
                 cable_voltage = self.get_cable_voltage(branch = i)
-                key_list_pwr.append(f"Dissipation through {cable_voltage} LDO input")
+                key_list_pwr.append(f"Dissipation through {cable_voltage} LDO input (W)")
 
         #Adds the rest of that first colums with all these indicators for the rows
         self.initial_df.extend(key_list_pwr)
