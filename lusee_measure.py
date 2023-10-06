@@ -67,7 +67,7 @@ class LuSEE_MEASURE:
 
         x = self.comm.get_pfb_data(header = False)
         y = [hex(i) for i in x]
-        print(y)
+        #print(y)
         self.plot_fft(x)
 
     def plot_fft(self, data):
@@ -170,6 +170,8 @@ if __name__ == "__main__":
         measure.comm.reset()
         measure.comm.reset_adc(adc = 0)
 
+    measure.comm.readout_mode("fpga")
+
     if (arg == "adc"):
         measure.comm.reset_adc(adc = 0)
         measure.comm.write_adc(adc = 0, reg = 0x25, data = 0xF4)
@@ -195,7 +197,7 @@ if __name__ == "__main__":
     print(f"Multiplexer array is {bin(f)}")
 
     x = measure.get_adc1_data()
-    print(x)
+    #print(x)
     #measure.save_adc_for_simulation(x)
     measure.plot(measure.twos_comp(x, 14))
 

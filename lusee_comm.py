@@ -43,6 +43,7 @@ class LuSEE_COMMS:
         self.counter_num = None
 
         self.wait_time = 0.025
+        self.readout_register = 0x1
         self.adc_function = 0x2
         self.adc_reg_data = 0x3
         self.action_register = 0x4
@@ -107,6 +108,14 @@ class LuSEE_COMMS:
             return
 
         self.connection.write_reg(self.function_register, val)
+
+    def readout_mode(self, mode):
+        if (mode == "fpga"):
+            self.connection.write_reg(self.readout_register, 1)
+        elif (mode == "sw"):
+            self.connection.write_reg(self.readout_register, 0)
+        else:
+            print(f"Python LuSEE Comm --> You need to use a readout method of 'fpga' or 'sw', you used {mode}")
 
     def set_counter_num(self, num):
         self.counter_num = int(num)

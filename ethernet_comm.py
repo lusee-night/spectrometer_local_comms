@@ -30,10 +30,12 @@ class LuSEE_ETHERNET:
         self.cdi_reset = 0x0
         self.spectrometer_reset = 0x0
 
-        self.address_read = 0xA00000
-        self.address_write = 0xA10000
-        self.first_data_pack = 0xA20000
-        self.second_data_pack = 0xA30000
+        self.address_read = 0xA30000
+        self.address_write = 0xA20000
+        self.first_data_pack = 0xA00000
+        self.second_data_pack = 0xA10000
+
+        self.max_packet = 0x7FB
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
@@ -215,6 +217,9 @@ class LuSEE_ETHERNET:
         #Packet format defined by Jack Fried in VHDL for custom CDI interface
         #Headers come in as 16 bit words. ADC and counter payload comes in as 16 bit words
         #FFT data comes in as 32 bit words. There are 13 header bytes. That's where the problem starts.
+        #These variables are to communicate state between the loops for datums that are split between packets
+        even = True;
+        carry_val = 0;
         for num,i in enumerate(data):
             header_dict[f"{num}"] = {}
             if (data_type == "adc"):
@@ -222,20 +227,23 @@ class LuSEE_ETHERNET:
                 #Unpacking into shorts in increments of 2 bytes
                 formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
             elif (data_type == "fft"):
+                #print(f"Length is {len(i)}")
                 unpack_buffer = int((len(i))/4)
                 #Unpacking into shorts in increments of 2 bytes just for the header
                 formatted_data = struct.unpack_from(f">{unpack_buffer*2}H",i)
+
+                #If this is PFB data, then this packet either ends with the first 16 bits of the next sample
+                #Or the last 16 bits of the previous sample. Taking these 16 bit shorts help piece it back together later
+                first_val = formatted_data[13]
+                last_val = formatted_data[(unpack_buffer * 2) - 1]
+
             #print(formatted_data)
             udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
             header_dict[f"{num}"]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
             header_dict[f"{num}"]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
             header_dict[f"{num}"]["message_id"] = (formatted_data[8] >> 10)
-            message_length = (formatted_data[8] & 0x3FF)
-            if (message_length != 0x3fd):
-                full_fifo = False
-                message_length = (formatted_data[8] & 0x7FE) << 1
-            else:
-                full_fifo = True
+
+
             header_dict[f"{num}"]["message_spare"] = formatted_data[9]
             header_dict[f"{num}"]["ccsds_version"] = formatted_data[10] >> 13
             header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
@@ -243,9 +251,37 @@ class LuSEE_ETHERNET:
             header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
             header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
-            ccsds_packet_len = formatted_data[12] >> 1
+
+            #The logic that determines the packet length is a little funky
+            #It always forces itself to send an odd number of values
+            ccsds_packet_len = (formatted_data[12] + 1) >> 1
+            if ((ccsds_packet_len % 2) == 0):
+                ccsds_packet_len += 1
+
+            if (ccsds_packet_len == self.max_packet):
+                message_length = (formatted_data[8] & 0x3FF)
+                full_fifo = True
+                #print("fifo full")
+            else:
+                message_length = (formatted_data[8] & 0x7FF)
+                full_fifo = False
+
+            if (not full_fifo):
+                #print("doing the adding")
+                if ((ccsds_packet_len % 2) == 0):
+                    message_length += 4
+                else:
+                    message_length += 3
+
+            if (full_fifo):
+                #print("doing the doubling")
+                #Because of the silly way Jack sends the message length, we need to double it if it was a full packet
+                message_length = 2 * message_length
+
+            #print(f"message_length is {message_length}")
 
             if (data_type == "adc"):
+                #ADC data is simple, it's the 16 bit shorts that were already unpacked
                 added_packet_size = len(formatted_data[13:])
                 data_packet.extend(formatted_data[13:])
             elif (data_type == "fft"):
@@ -254,16 +290,23 @@ class LuSEE_ETHERNET:
                 #The FFT comes in as 32 bit words.
                 #So for example a 4 sample packet would be -> 26 byte header, 4 byte sample, 4 byte sample, 4 byte sample = 38 bytes
                 #unpack_buffer would have been int(38/4) = 9. If we want to unpack those data samples as 32 bit ints,
-                #Then we need to subtract 6 from the buffer (it was really 6.5, but the unpack_buffer = int((len(i))/4) will always have a 0.5 that cancels)
-                #Now when we start at the 27th byte, we get just the data as 32 bit ints
-                formatted_data2 = struct.unpack_from(f">{unpack_buffer-6}I",i[26:])
-                added_packet_size = len(formatted_data2)*2
-                formatted_data3 = [(i >> 16) + ((i & 0xFFFF) << 16) for i in formatted_data2]
-                data_packet.extend(formatted_data3)
+                #Then we need to subtract 7 ints from the buffer and when we start at the 27th byte, we get just the data as 32 bit ints
+                #However, we do leave off the last 2 bytes. If this an even packet (0, 2, 4) then we save the last 2 bytes to concatenate in the next loop
+                #If it's an odd numbered packet, we concatenate the first 2 bytes with the previous carryover. Then we need to start at the 28th byte
 
-            if (full_fifo):
-                #Because of the silly way Jack sends the message length, we need to double it if it was a full packet
-                message_length = 2 * message_length
+                if (even):
+                    even = False
+                    formatted_data2 = struct.unpack_from(f">{unpack_buffer-7}I",i[26:])
+                    formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+                    carry_val = last_val
+                else:
+                    even = True
+                    formatted_data2 = struct.unpack_from(f">{unpack_buffer-7}I",i[28:])
+                    formatted_data3 = [(first_val << 16) + last_val] + [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+
+                #It always counts one more data in the size because of the half-value
+                added_packet_size = len(formatted_data2)*2 + 1
+                data_packet.extend(formatted_data3)
 
             if (udp_packet_count != 0):
                 if (udp_packet_num != (udp_packet_count + 1)):
@@ -273,11 +316,11 @@ class LuSEE_ETHERNET:
                 if (ccsds_sequence_cnt != (cdi_packet_count + 1)):
                     print(f"WARNING: Python Ethernet --> Previous CDI packet number was {cdi_packet_count} and current CDI packet number is {ccsds_sequence_cnt}")
 
-            #if (ccsds_packet_len != (message_length)):
-                #print(f"WARNING: Python Ethernet --> Packet lengths disagree. CCSDS packet length is {ccsds_packet_len} and message_length/rd_fifo_used is {message_length}")
-                #print("Python Ethernet --> If this is annoying, remind Jack to fix this!")
-                #print(formatted_data[0:13])
-                #print(len(formatted_data[13:]))
+            # if (ccsds_packet_len != (message_length)):
+            #     print(f"WARNING: Python Ethernet --> Packet lengths disagree. CCSDS packet length is {ccsds_packet_len} and message_length/rd_fifo_used is {message_length}")
+            #     print("Python Ethernet --> If this is annoying, remind Jack to fix this!")
+            #     print(formatted_data[0:13])
+            #     print(len(formatted_data[13:]))
 
             if (added_packet_size != ccsds_packet_len):
                 print(f"WARNING: Python Ethernet --> Packet header says that the payload should be {ccsds_packet_len} words, but it is {added_packet_size} words!")
@@ -295,4 +338,4 @@ if __name__ == "__main__":
     #arg = sys.argv[1]
     luseeEthernet = LuSEE_ETHERNET()
 
-    luseeEthernet.write_reg(9, 1)
+    print(luseeEthernet.read_cdi_reg(10))
