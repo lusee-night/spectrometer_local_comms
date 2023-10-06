@@ -47,7 +47,7 @@ class LuSEE_MEASURE:
         #Need to set these
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
-        self.comm.set_weight_fold_shift(0xD)
+        self.comm.set_weight_fold_shift(0xDDDD)
         self.comm.set_pfb_delays(0x332)
 
         #Notch not working yet
