@@ -16,6 +16,27 @@ class LuSEE_MEASURE:
         data = self.comm.get_adc_data(header = False)
         return data
 
+    def get_adc2_data(self):
+        self.comm.reset_all_fifos()
+        self.comm.load_adc_fifos()
+        self.comm.set_function("ADC2")
+        data = self.comm.get_adc_data(header = False)
+        return data
+
+    def get_adc3_data(self):
+        self.comm.reset_all_fifos()
+        self.comm.load_adc_fifos()
+        self.comm.set_function("ADC3")
+        data = self.comm.get_adc_data(header = False)
+        return data
+
+    def get_adc4_data(self):
+        self.comm.reset_all_fifos()
+        self.comm.load_adc_fifos()
+        self.comm.set_function("ADC4")
+        data = self.comm.get_adc_data(header = False)
+        return data
+
     def get_adc2_header_data(self):
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
@@ -146,6 +167,39 @@ class LuSEE_MEASURE:
                 print(hex_str)
                 the_file.write(f"{hex_str}\n")
 
+    def adc_cycle(self):
+        f = self.set_analog_mux(0, 0, 4, "low")
+        print(f"Multiplexer array is {bin(f)}")
+
+        x = self.get_adc1_data()
+        #print(x)
+        #measure.save_adc_for_simulation(x)
+        self.plot(self.twos_comp(x, 14))
+
+        f = self.set_analog_mux(1, 1, 4, "low")
+        print(f"Multiplexer array is {bin(f)}")
+
+        x = self.get_adc2_data()
+        #print(x)
+        #measure.save_adc_for_simulation(x)
+        self.plot(self.twos_comp(x, 14))
+
+        f = self.set_analog_mux(2, 2, 4, "low")
+        print(f"Multiplexer array is {bin(f)}")
+
+        x = self.get_adc3_data()
+        #print(x)
+        #measure.save_adc_for_simulation(x)
+        self.plot(self.twos_comp(x, 14))
+
+        f = self.set_analog_mux(3, 2, 4, "low")
+        print(f"Multiplexer array is {bin(f)}")
+
+        x = self.get_adc4_data()
+        #print(x)
+        #measure.save_adc_for_simulation(x)
+        self.plot(self.twos_comp(x, 14))
+
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         arg = sys.argv[1]
@@ -192,6 +246,8 @@ if __name__ == "__main__":
     # measure.plot(measure.twos_comp(e[0], 14))
     #
     #d = measure.get_pfb_data()
+
+    #measure.adc_cycle()
 
     f = measure.set_analog_mux(0, 0, 4, "low")
     print(f"Multiplexer array is {bin(f)}")

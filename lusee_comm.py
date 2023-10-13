@@ -79,13 +79,12 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.adc_function, 0x0)
 
     def write_adc(self, adc, reg, data):
-        print(f"Reg is {reg} and data is {hex(data)}")
+        #print(f"Reg is {reg} and data is {hex(data)}")
         val = data & 0xFF
         reg_num = reg & 0xFF
         final_val = reg_num + (val << 8)
-        print(f"sending {hex(final_val)}")
+        #print(f"sending {hex(final_val)}")
         self.connection.write_reg(self.adc_reg_data, final_val)
-        print(f"reg 2 is {1 << int(adc)}")
         time.sleep(self.wait_time)
         self.connection.write_reg(self.adc_function, 1 << int(adc))
         time.sleep(self.wait_time)
@@ -97,7 +96,14 @@ class LuSEE_COMMS:
         self.write_adc(adc, reg, 0)
         resp = self.connection.read_reg(self.adc_reg_data)
         self.write_adc(adc, 0, 0)
-        return int(resp)
+
+        #print(hex(resp))
+        if (adc == 0):
+            return (0xFF0000 & int(resp)) >> 16
+        elif (adc == 1):
+            return (0xFF000000 & int(resp)) >> 24
+        else:
+            return int(resp)
 
     def set_function(self, function):
         try:
@@ -337,13 +343,29 @@ class LuSEE_COMMS:
 
         mux_byte = (gain_b << 7) + (gain_a << 6) + (c[1] << 5) + (b[1] << 4) + (a[1] << 3) + (c[0] << 2) + (b[0] << 1) + a[0]
         total_register = mux_byte << (ch*8)
+        zeroing_mask = 0xFF << (ch*8)
+        #print(f"zeroing mask is {hex(zeroing_mask)}")
+        current_val = self.connection.read_reg(self.mux_reg)
+        #print(f"current val is {hex(current_val)}")
+        zeroed_val = current_val & ~zeroing_mask
+        #print(f"zeroed_val is {hex(zeroed_val)}")
+        total_register = zeroed_val + total_register
+        #print(f"total_register is {hex(total_register)}")
         self.connection.write_reg(self.mux_reg, total_register)
         return total_register
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
     ethernet = LuSEE_COMMS()
-    resp = 0xAAAAAAAA
-    for num,i in enumerate(ethernet.fft_sel):
-        print(num)
-        resp = ethernet.set_corr_array(i, 0x3F, 0x0)
+    # resp = 0xAAAAAAAA
+    # for num,i in enumerate(ethernet.fft_sel):
+    #     print(num)
+    #     resp = ethernet.set_corr_array(i, 0x3F, 0x0)
+
+    ethernet.write_adc(0, 5, 0x69)
+    resp = ethernet.read_adc(0, 5)
+    print(hex(resp))
+
+    ethernet.write_adc(1, 4, 0x67)
+    resp = ethernet.read_adc(1, 4)
+    print(hex(resp))

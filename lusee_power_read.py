@@ -8,8 +8,9 @@ from lusee_measure import LuSEE_MEASURE
 
 #A class for each test so we can easily loop through them pick out these properties
 class POWER_TEST:
-    def __init__(self, name, reg1_val, reg2_val, reg3_val):
+    def __init__(self, name, reg0_val, reg1_val, reg2_val, reg3_val):
         self.name = name
+        self.reg0_val = reg0_val
         self.reg1_val = reg1_val
         self.reg2_val = reg2_val
         self.reg3_val = reg3_val
@@ -51,6 +52,8 @@ class LuSEE_POWER:
         self.delay = 5
 
         #Various registers and disable bits for part of the spectrometer
+        self.ud_ddr_disable = 0x0
+
         self.SPE_disable     = 40
         self.weight_streamer = 0b1
         self.weight_fold1    = 0b10
@@ -128,21 +131,27 @@ class LuSEE_POWER:
         #Tests are run sequentially, the settings are applied, then power data is collected
         #Each listing needs a name and what to set the 3 "disable spectrometer" registers to
         self.tests = []
-        self.tests.append(POWER_TEST(name = "Everything on", reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "Notch correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFF))
-        self.tests.append(POWER_TEST(name = "Main correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        self.tests.append(POWER_TEST(name = "Notch averager off", reg1_val = 0xFF0000, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        self.tests.append(POWER_TEST(name = "Deinterlacer off",
-                                reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        self.tests.append(POWER_TEST(name = "FFT off",
-                                reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34,
-                                reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        self.tests.append(POWER_TEST(name = "Weight Fold off",
-                                reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4,
-                                reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
+        self.tests.append(POWER_TEST(name = "Everything on", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "DDR in reset + uC and Spectrometer on", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "uC in reset + DDR and Spectrometer on", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "uC/DDR disabled + Spectrometer on", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "All uC/DDR options", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "Spectrometer only", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "Notch correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFF))
+        # self.tests.append(POWER_TEST(name = "Main correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
+        # self.tests.append(POWER_TEST(name = "Notch averager off", reg1_val = 0xFF0000, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
+        # self.tests.append(POWER_TEST(name = "Deinterlacer off",
+        #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
+        # self.tests.append(POWER_TEST(name = "FFT off",
+        #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34,
+        #                         reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
+        # self.tests.append(POWER_TEST(name = "Weight Fold off",
+        #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4,
+        #                         reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
 
-        self.tests.append(POWER_TEST(name = "Weight Streamer off",
+        self.tests.append(POWER_TEST(name = "Spectrometer off",
+                                reg0_val = 0x400,
                                 reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4 + self.weight_streamer,
                                 reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
 
@@ -155,24 +164,24 @@ class LuSEE_POWER:
 
                                "+5V Output Voltage":0,
                                "+5V Output Current":1,
-                               "-5V Output Voltage":2,
-                               "-5V Output Current":3,
-
-                               "1.8VA Output Voltage":4,
-                               "1.8VA Output Current":5,
-                               "1.8VAD Output Voltage":6,
-                               "1.8VAD Output Current":7,
-
-                               "3.3VD Output Voltage":0xA,
-                               "3.3VD Output Current":0xB,
-                               "2.5VD Output Voltage":0xC,
-                               "2.5VD Output Current":0xD,
-
-                               "1.8VD Output Voltage":0xE,
-                               "1.8VD Output Current":0xF,
-                               "1.5VD Output Voltage":0x10,
-                               "1.5VD Output Current":0x11,
-                               "1.0VD Output Voltage":0x12,
+                               # "-5V Output Voltage":2,
+                               # "-5V Output Current":3,
+                               #
+                               # "1.8VA Output Voltage":4,
+                               # "1.8VA Output Current":5,
+                               # "1.8VAD Output Voltage":6,
+                               # "1.8VAD Output Current":7,
+                               #
+                               # "3.3VD Output Voltage":0xA,
+                               # "3.3VD Output Current":0xB,
+                               # "2.5VD Output Voltage":0xC,
+                               # "2.5VD Output Current":0xD,
+                               #
+                               # "1.8VD Output Voltage":0xE,
+                               # "1.8VD Output Current":0xF,
+                               # "1.5VD Output Voltage":0x10,
+                               # "1.5VD Output Current":0x11,
+                               # "1.0VD Output Voltage":0x12,
                                "1.0VD Output Current":0x13,
                                }
 
@@ -327,11 +336,13 @@ class LuSEE_POWER:
     #Just writes the registers that enable/disable parts of the spectrometer and waits for power to settle
     def prepare_test(self, test):
         print(f"Preparing test {test.name}")
+        self.comm.connection.write_reg(self.ud_ddr_disable, test.reg0_val)
         self.comm.connection.write_reg(self.SPE_notch_avg_disable, test.reg1_val)
         self.comm.connection.write_reg(self.SPE_avg_disable, test.reg2_val)
         self.comm.connection.write_reg(self.corr_disable, test.reg3_val)
         print(f"Waiting {self.delay} seconds for power to stabilize")
         time.sleep(self.delay)
+        print(self.comm.connection.read_reg(0))
 
     #Measures all the desired tests. The name argument is just the name of the configuration, "FFT off" for example
     def power_sequence(self, name):
@@ -409,7 +420,7 @@ class LuSEE_POWER:
                 running_list.extend([adc0, p, p_ldo])
             else:
                 running_list.extend([adc0])
-
+            #input("Is this ok?")
         #With the full column, we can now add it to the Pandas Dataframe with the configuration title
         #print(self.df)
         #print(running_list)
@@ -448,13 +459,40 @@ class LuSEE_POWER:
         adc4 = (val2/self.ina_gain) / (self.resistors[branch])
         return adc0, adc4
 
+    def mux_test(self):
+        self.hk.init_i2c_mux()
+        try:
+            while(1):
+                resp = self.hk.write_i2c_mux(0x11)
+                if (resp == 0):
+                    print("correct")
+                else:
+                    print("incorrect")
+        except KeyboardInterrupt:
+            pass
+
+        self.comm.connection.write_reg(self.ud_ddr_disable, 0x400)
+        print("switched")
+
+        try:
+            while(1):
+                resp = self.hk.write_i2c_mux(0x11)
+                if (resp == 0):
+                    print("correct")
+                else:
+                    print("incorrect")
+        except KeyboardInterrupt:
+            pass
+
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         name = sys.argv[1]
     else:
         name = "test"
 
+
     measure = LuSEE_MEASURE()
+    print(measure.comm.connection.read_reg(0))
     measure.comm.connection.write_cdi_reg(5, 69)
     resp = measure.comm.connection.read_cdi_reg(5)
     if (resp == 69):
@@ -470,5 +508,6 @@ if __name__ == "__main__":
         sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
 
     power = LuSEE_POWER(name)
+    #power.mux_test()
     power.sequence()
     print("Finished!")
