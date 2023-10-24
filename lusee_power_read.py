@@ -131,11 +131,11 @@ class LuSEE_POWER:
         #Tests are run sequentially, the settings are applied, then power data is collected
         #Each listing needs a name and what to set the 3 "disable spectrometer" registers to
         self.tests = []
-        self.tests.append(POWER_TEST(name = "Everything on", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "DDR in reset + uC and Spectrometer on", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "uC in reset + DDR and Spectrometer on", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "uC/DDR disabled + Spectrometer on", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "All uC/DDR options", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "Everything on", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "DDR in reset + uC and Spectrometer on", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "uC in reset + DDR and Spectrometer on", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "uC/DDR disabled + Spectrometer on", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "All uC/DDR options applied", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Spectrometer only", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Notch correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFF))
@@ -164,24 +164,24 @@ class LuSEE_POWER:
 
                                "+5V Output Voltage":0,
                                "+5V Output Current":1,
-                               # "-5V Output Voltage":2,
-                               # "-5V Output Current":3,
-                               #
-                               # "1.8VA Output Voltage":4,
-                               # "1.8VA Output Current":5,
-                               # "1.8VAD Output Voltage":6,
-                               # "1.8VAD Output Current":7,
-                               #
-                               # "3.3VD Output Voltage":0xA,
-                               # "3.3VD Output Current":0xB,
-                               # "2.5VD Output Voltage":0xC,
-                               # "2.5VD Output Current":0xD,
-                               #
-                               # "1.8VD Output Voltage":0xE,
-                               # "1.8VD Output Current":0xF,
-                               # "1.5VD Output Voltage":0x10,
-                               # "1.5VD Output Current":0x11,
-                               # "1.0VD Output Voltage":0x12,
+                               "-5V Output Voltage":2,
+                               "-5V Output Current":3,
+
+                               "1.8VA Output Voltage":4,
+                               "1.8VA Output Current":5,
+                               "1.8VAD Output Voltage":6,
+                               "1.8VAD Output Current":7,
+
+                               "3.3VD Output Voltage":0xA,
+                               "3.3VD Output Current":0xB,
+                               "2.5VD Output Voltage":0xC,
+                               "2.5VD Output Current":0xD,
+
+                               "1.8VD Output Voltage":0xE,
+                               "1.8VD Output Current":0xF,
+                               "1.5VD Output Voltage":0x10,
+                               "1.5VD Output Current":0x11,
+                               "1.0VD Output Voltage":0x12,
                                "1.0VD Output Current":0x13,
                                }
 
@@ -420,7 +420,7 @@ class LuSEE_POWER:
                 running_list.extend([adc0, p, p_ldo])
             else:
                 running_list.extend([adc0])
-            #input("Is this ok?")
+            input("Is this ok?")
         #With the full column, we can now add it to the Pandas Dataframe with the configuration title
         #print(self.df)
         #print(running_list)
@@ -509,5 +509,7 @@ if __name__ == "__main__":
 
     power = LuSEE_POWER(name)
     #power.mux_test()
-    power.sequence()
+    measure.comm.connection.write_reg(0, 0x700)
+    measure.comm.connection.read_reg(0)
+    #power.sequence()
     print("Finished!")

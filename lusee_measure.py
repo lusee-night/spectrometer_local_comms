@@ -7,6 +7,8 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
+        self.version = 1.0
+
         self.comm = LuSEE_COMMS()
 
     def get_adc1_data(self):
@@ -68,12 +70,12 @@ class LuSEE_MEASURE:
         #Need to set these
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
-        self.comm.set_weight_fold_shift(0xDDDD)
-        self.comm.set_pfb_delays(0x332)
+        self.comm.set_sticky_error(0x0)
 
         #Notch not working yet
         self.comm.set_notch_average(4)
-        self.comm.notch_filter_on()
+        #self.comm.notch_filter_on()
+        self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
@@ -88,8 +90,37 @@ class LuSEE_MEASURE:
 
         x = self.comm.get_pfb_data(header = False)
         y = [hex(i) for i in x]
-        #print(y)
+
         self.plot_fft(x)
+
+    def get_pfb_data_test(self):
+        #Need to set these
+        self.comm.set_function("FFT1")
+        self.comm.set_weight_fold_shift(0xEEEE)
+
+        #Notch not working yet
+        self.comm.set_notch_average(4)
+        #self.comm.notch_filter_on()
+        self.comm.notch_filter_off()
+
+        #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
+        self.comm.start_spectrometer()
+        #Select which FFT to read out
+        self.comm.select_fft("A1")
+        #Need to set these as well for each FFT you read out
+        self.comm.set_index_array("A1", 0x1F, "main")
+        self.comm.set_index_array("A1", 0x1F, "notch")
+
+        for i in range(21):
+            print(f"Average setting is {i}")
+            self.comm.set_main_average(i)
+            self.comm.reset_all_fifos()
+            self.comm.load_fft_fifos()
+
+            x = self.comm.get_pfb_data(header = False)
+            y = [hex(i) for i in x]
+
+            self.plot_fft(x)
 
     def plot_fft(self, data):
         fig, ax = plt.subplots()
@@ -153,53 +184,6 @@ class LuSEE_MEASURE:
         result = self.comm.set_chan(ch, in1, in2, gain)
         return result
 
-    def save_adc_for_simulation(self, data):
-        with open("output.txt", 'w') as the_file:
-            for i in data:
-                j = int(i)
-                #Convert's negative number to two's complement
-                if (j < 0):
-                    print(j)
-                    j = (16383 + 1 - abs(j))
-                    print(j)
-                    print(hex(j))
-                hex_str = f"{j:04x}"
-                print(hex_str)
-                the_file.write(f"{hex_str}\n")
-
-    def adc_cycle(self):
-        f = self.set_analog_mux(0, 0, 4, "low")
-        print(f"Multiplexer array is {bin(f)}")
-
-        x = self.get_adc1_data()
-        #print(x)
-        #measure.save_adc_for_simulation(x)
-        self.plot(self.twos_comp(x, 14))
-
-        f = self.set_analog_mux(1, 1, 4, "low")
-        print(f"Multiplexer array is {bin(f)}")
-
-        x = self.get_adc2_data()
-        #print(x)
-        #measure.save_adc_for_simulation(x)
-        self.plot(self.twos_comp(x, 14))
-
-        f = self.set_analog_mux(2, 2, 4, "low")
-        print(f"Multiplexer array is {bin(f)}")
-
-        x = self.get_adc3_data()
-        #print(x)
-        #measure.save_adc_for_simulation(x)
-        self.plot(self.twos_comp(x, 14))
-
-        f = self.set_analog_mux(3, 2, 4, "low")
-        print(f"Multiplexer array is {bin(f)}")
-
-        x = self.get_adc4_data()
-        #print(x)
-        #measure.save_adc_for_simulation(x)
-        self.plot(self.twos_comp(x, 14))
-
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         arg = sys.argv[1]
@@ -250,7 +234,7 @@ if __name__ == "__main__":
     #measure.adc_cycle()
 
     f = measure.set_analog_mux(0, 0, 4, "low")
-    print(f"Multiplexer array is {bin(f)}")
+    #print(f"Multiplexer array is {bin(f)}")
 
     x = measure.get_adc1_data()
     #print(x)
@@ -260,5 +244,6 @@ if __name__ == "__main__":
     #measure.comm.stop_spectrometer()
     #input("ready?")
     d = measure.get_pfb_data()
+    #measure.get_pfb_data_test()
 
     #You can save/plot the output data however you wish!

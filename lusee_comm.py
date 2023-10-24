@@ -3,6 +3,8 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
+        self.version = 1.0
+
         self.connection = LuSEE_ETHERNET()
 
         self.readout_modes = {
@@ -42,6 +44,9 @@ class LuSEE_COMMS:
         self.bytes_per_packet = 0x7F8
         self.counter_num = None
 
+        self.cycle_time = 40e-6
+        self.avg = 0
+
         self.wait_time = 0.025
         self.readout_register = 0x1
         self.adc_function = 0x2
@@ -66,8 +71,6 @@ class LuSEE_COMMS:
         self.notch_array1 = 28
         self.notch_array2 = 29
         self.notch_array3 = 30
-
-        self.pfb_delays = 31
 
     #Only need to do one in the beginning
     #Takes a few seconds
@@ -157,6 +160,7 @@ class LuSEE_COMMS:
 
     def set_main_average(self, avg):
         avg_num = int(avg)
+        self.avg = avg_num
         self.connection.write_reg(self.main_average, avg_num)
 
     def set_notch_average(self, avg):
@@ -291,10 +295,6 @@ class LuSEE_COMMS:
         self.connection.write_reg(register, add_value)
         return add_value
 
-    def set_pfb_delays(self, delay):
-        delay_num = int(delay)
-        self.connection.write_reg(self.pfb_delays, delay_num)
-
     def get_data(self, data_type, num, header=False):
         i = 0
         while (i < self.tries):
@@ -326,6 +326,10 @@ class LuSEE_COMMS:
         return data
 
     def get_pfb_data(self, header=False):
+        wait_time = self.cycle_time * (2**self.avg)
+        if (wait_time > 1.0):
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+        time.sleep(40e-6 * (2**self.avg))
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
 
@@ -334,9 +338,14 @@ class LuSEE_COMMS:
         b = [None, None]
         c = [None, None]
         for num, i in enumerate([in1, in2]):
-            a[num] = 0 if (i == 2 or i == 0) else 1
-            b[num] = 0 if (i == 2 or i == 1) else 1
-            c[num] = 0 if (i <= 3 or i >= 0) else 1
+            if (i < 4):
+                a[num] = 0 if (i == 2 or i == 0) else 1
+                b[num] = 0 if (i == 2 or i == 1) else 1
+                c[num] = 0 if (i <= 3 or i >= 0) else 1
+            else:
+                a[num] = i & 0x1
+                b[num] = (i >> 0x1) & 0x1
+                c[num] = (i >> 0x2) & 0x1
 
         gain_a = 1 if (gain == "high") else 0
         gain_b = 1 if (gain == "low") else 0

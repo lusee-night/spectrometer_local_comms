@@ -7,6 +7,8 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
+        self.version = 1.0
+
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
         self.udp_timeout = 1
@@ -298,11 +300,13 @@ class LuSEE_ETHERNET:
                     even = False
                     formatted_data2 = struct.unpack_from(f">{unpack_buffer-7}I",i[26:])
                     formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
-                    carry_val = last_val
+                    #This was a full packet and the next packet might be coming so we'd need to concatenate this value with the next loop's
+                    if (unpack_buffer == 1028):
+                        carry_val = last_val
                 else:
                     even = True
                     formatted_data2 = struct.unpack_from(f">{unpack_buffer-7}I",i[28:])
-                    formatted_data3 = [(first_val << 16) + last_val] + [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+                    formatted_data3 = [(first_val << 16) + carry_val] + [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
 
                 #It always counts one more data in the size because of the half-value
                 added_packet_size = len(formatted_data2)*2 + 1
