@@ -61,7 +61,7 @@ class LuSEE_COMMS:
         self.mux_reg = 20
         self.main_average = 21
         self.notch_average = 22
-        self.weight_fold_shift = 23
+        self.sticky_error = 23
         self.notch_reg = 24
 
         self.corr_array1 = 25
@@ -167,9 +167,9 @@ class LuSEE_COMMS:
         avg_num = int(avg)
         self.connection.write_reg(self.notch_average, avg_num)
 
-    def set_weight_fold_shift(self, shift):
-        shift_num = int(shift)
-        self.connection.write_reg(self.weight_fold_shift, shift_num)
+    def set_sticky_error(self, sticky):
+        stick = int(sticky)
+        self.connection.write_reg(self.sticky_error, stick)
 
     def notch_filter_on(self):
         self.connection.write_reg(self.notch_reg, 1)
