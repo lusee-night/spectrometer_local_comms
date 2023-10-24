@@ -292,7 +292,8 @@ class LuSEE_ETHERNET:
             raw_data.extend(i[26:])
 
         formatted_data2 = struct.unpack_from(">2048I",raw_data)
-        return formatted_data2, header_dict
+        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+        return formatted_data3, header_dict
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
