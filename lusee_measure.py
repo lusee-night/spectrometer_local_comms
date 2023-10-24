@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.0
+        self.version = 1.01
 
         self.comm = LuSEE_COMMS()
 
