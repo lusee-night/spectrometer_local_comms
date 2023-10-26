@@ -4,7 +4,6 @@ import pandas as pd
 
 from lusee_hk_eric import LuSEE_HK
 from lusee_comm import LuSEE_COMMS
-from lusee_measure import LuSEE_MEASURE
 
 #A class for each test so we can easily loop through them pick out these properties
 class POWER_TEST:
@@ -233,10 +232,10 @@ class LuSEE_POWER:
         #Does the typical initialization of the FPGA for spectrometer usage
         self.comm.reset()
         #Analog multiplexers connect channel 0 to input 0 with low gain
-        f = measure.set_analog_mux(0, 0, 4, "low")
-        f = measure.set_analog_mux(1, 1, 4, "high")
-        f = measure.set_analog_mux(2, 2, 4, "low")
-        f = measure.set_analog_mux(3, 3, 4, "high")
+        f = self.comm.set_chan(0, 0, 4, "low")
+        f = self.comm.set_chan(1, 1, 4, "high")
+        f = self.comm.set_chan(2, 2, 4, "low")
+        f = self.comm.set_chan(3, 3, 4, "high")
 
         #Spectrometer settings
         self.comm.set_function("FFT1")
@@ -494,17 +493,16 @@ if __name__ == "__main__":
     else:
         name = "test"
 
-
-    measure = LuSEE_MEASURE()
-    measure.comm.connection.write_cdi_reg(5, 69)
-    resp = measure.comm.connection.read_cdi_reg(5)
+    comm = LuSEE_COMMS()
+    comm.connection.write_cdi_reg(5, 69)
+    resp = comm.connection.read_cdi_reg(5)
     if (resp == 69):
         print("[TEST]", "Communication to DCB Emulator is ok")
     else:
         sys.exit("[TEST] -> Communication to DCB Emulator is not ok")
 
-    measure.comm.connection.write_reg(5, 69)
-    resp = measure.comm.connection.read_reg(5)
+    comm.connection.write_reg(5, 69)
+    resp = comm.connection.read_reg(5)
     if (resp == 69):
         print("[TEST]", "Communication to Spectrometer Board is ok")
     else:
