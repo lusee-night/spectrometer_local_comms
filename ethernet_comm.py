@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.0
+        self.version = 1.01
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"

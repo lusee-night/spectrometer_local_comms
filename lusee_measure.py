@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.0
+        self.version = 1.01
 
         self.comm = LuSEE_COMMS()
 
@@ -70,7 +70,7 @@ class LuSEE_MEASURE:
         #Need to set these
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
-        self.comm.set_weight_fold_shift(0xEEEE)
+        self.comm.set_sticky_error(0x0)
 
         #Notch not working yet
         self.comm.set_notch_average(4)
@@ -96,7 +96,7 @@ class LuSEE_MEASURE:
     def get_pfb_data_test(self):
         #Need to set these
         self.comm.set_function("FFT1")
-        self.comm.set_weight_fold_shift(0xEEEE)
+        self.comm.set_sticky_error(0x0)
 
         #Notch not working yet
         self.comm.set_notch_average(4)
