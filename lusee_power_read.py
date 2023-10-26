@@ -131,11 +131,14 @@ class LuSEE_POWER:
         #Tests are run sequentially, the settings are applied, then power data is collected
         #Each listing needs a name and what to set the 3 "disable spectrometer" registers to
         self.tests = []
-        # self.tests.append(POWER_TEST(name = "Everything on", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "DDR in reset + uC and Spectrometer on", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "uC in reset + DDR and Spectrometer on", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "uC/DDR disabled + Spectrometer on", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "All uC/DDR options applied", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x0", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x100", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x200", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x300", reg0_val = 0x300, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x400", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x500", reg0_val = 0x500, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x600", reg0_val = 0x600, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        self.tests.append(POWER_TEST(name = "0x700", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Spectrometer only", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Notch correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFF))
@@ -150,8 +153,8 @@ class LuSEE_POWER:
         #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4,
         #                         reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
 
-        self.tests.append(POWER_TEST(name = "Spectrometer off",
-                                reg0_val = 0x400,
+        self.tests.append(POWER_TEST(name = "All uC/DDR options applied + Spectrometer off",
+                                reg0_val = 0x0,
                                 reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4 + self.weight_streamer,
                                 reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
 
@@ -230,13 +233,14 @@ class LuSEE_POWER:
         #Does the typical initialization of the FPGA for spectrometer usage
         self.comm.reset()
         #Analog multiplexers connect channel 0 to input 0 with low gain
-        self.comm.set_chan(0, 0, 4, "low")
+        f = measure.set_analog_mux(0, 0, 4, "low")
+        f = measure.set_analog_mux(1, 1, 4, "high")
+        f = measure.set_analog_mux(2, 2, 4, "low")
+        f = measure.set_analog_mux(3, 3, 4, "high")
 
         #Spectrometer settings
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
-        self.comm.set_weight_fold_shift(0xD)
-        self.comm.set_pfb_delays(0x332)
         self.comm.set_notch_average(4)
         self.comm.notch_filter_on()
 
@@ -420,7 +424,7 @@ class LuSEE_POWER:
                 running_list.extend([adc0, p, p_ldo])
             else:
                 running_list.extend([adc0])
-            input("Is this ok?")
+            #input("Is this ok?")
         #With the full column, we can now add it to the Pandas Dataframe with the configuration title
         #print(self.df)
         #print(running_list)
@@ -492,7 +496,6 @@ if __name__ == "__main__":
 
 
     measure = LuSEE_MEASURE()
-    print(measure.comm.connection.read_reg(0))
     measure.comm.connection.write_cdi_reg(5, 69)
     resp = measure.comm.connection.read_cdi_reg(5)
     if (resp == 69):
@@ -509,7 +512,5 @@ if __name__ == "__main__":
 
     power = LuSEE_POWER(name)
     #power.mux_test()
-    measure.comm.connection.write_reg(0, 0x700)
-    measure.comm.connection.read_reg(0)
-    #power.sequence()
+    power.sequence()
     print("Finished!")
