@@ -93,6 +93,27 @@ class LuSEE_MEASURE:
 
         self.plot_fft(x)
 
+    def get_pfb_data_all(self):
+        #Turn DDR on
+        #self.comm.connection.write_reg(0, 0x100)
+        time.sleep(1)
+        #Need to set these
+        self.comm.set_main_average(10)
+        self.comm.set_notch_average(4)
+        self.comm.set_sticky_error(0x0)
+
+        #self.comm.notch_filter_on()
+        self.comm.notch_filter_off()
+
+        #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
+        self.comm.start_spectrometer()
+        self.comm.set_all_index(0x1F)
+
+        x = self.comm.get_pfb_data_all(header = False)
+        print(x[0])
+        for i in range(16):
+            self.plot_fft(x[i])
+
     def get_pfb_data_test(self):
         #Need to set these
         self.comm.set_function("FFT1")
@@ -189,6 +210,7 @@ if __name__ == "__main__":
         arg = sys.argv[1]
     else:
         arg = None
+    #time.sleep(10)
     measure = LuSEE_MEASURE()
     measure.comm.connection.write_cdi_reg(5, 69)
     resp = measure.comm.connection.read_cdi_reg(5)
@@ -202,6 +224,7 @@ if __name__ == "__main__":
     if (resp == 69):
         print("[TEST]", "Communication to Spectrometer Board is ok")
     else:
+        print(resp)
         sys.exit("[TEST]", "Communication to Spectrometer Board is not ok")
 
     if (arg == "reset"):
@@ -243,7 +266,10 @@ if __name__ == "__main__":
 
     #measure.comm.stop_spectrometer()
     #input("ready?")
+    print(hex(measure.comm.connection.read_reg(0)))
     d = measure.get_pfb_data()
+    measure.comm.readout_mode("sw")
+    e = measure.get_pfb_data_all()
     #measure.get_pfb_data_test()
 
     #You can save/plot the output data however you wish!

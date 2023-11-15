@@ -177,6 +177,11 @@ class LuSEE_COMMS:
     def notch_filter_off(self):
         self.connection.write_reg(self.notch_reg, 0)
 
+    def set_all_index(self, val):
+        for key in self.fft_sel:
+            self.set_index_array(key, val, "main")
+            self.set_index_array(key, val, "notch")
+
     def set_index_array(self, fft, val, index_type):
         try:
             fft_num = self.fft_sel[fft]
@@ -332,6 +337,26 @@ class LuSEE_COMMS:
         time.sleep(40e-6 * (2**self.avg))
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
+
+    def get_pfb_data_all(self, header = False):
+        #Put Python in control of readout
+        self.connection.write_reg(43, 0x4)
+        #Enable data to go to spectrometer
+        self.connection.write_reg(42, 1)
+        self.connection.write_reg(42, 0)
+        #Wait for averagering
+
+
+        all_data = []
+        #Will return all 16 correlations
+        for i in range(16):
+            while((self.connection.read_reg(43) >> 3) == 0x0):
+                print("Waiting")
+            print(f"Ok, client's turn to read {hex(self.connection.read_reg(43))}")
+            data = self.connection.get_data_packets_sw(num=self.FFT_PACKETS, header = header)
+            all_data.append(data)
+            self.connection.write_reg(43, (self.connection.read_reg(43) & 0xFFFFFFF7))
+        return all_data
 
     def set_chan(self, ch, in1, in2, gain):
         a = [None, None]

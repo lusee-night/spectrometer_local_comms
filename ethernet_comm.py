@@ -214,6 +214,40 @@ class LuSEE_ETHERNET:
         else:
             return formatted_data
 
+    def get_data_packets_sw(self, num=1, header = False):
+        numVal = int(num)
+        #set up IPv4, UDP listening socket at requested IP
+        sock_data = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock_data.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock_data.bind((self.PC_IP,self.PORT_HSDATA))
+        sock_data.settimeout(self.udp_timeout)
+        #Read a certain amount of packets
+        incoming_packets = []
+        self.write_reg(43, self.read_reg(43) | 0x2)
+        self.write_reg(43, self.read_reg(43) & 0xFFFFFFFD)
+        for packet in range(0,numVal,1):
+            data = []
+            try:
+                data = sock_data.recv(self.BUFFER_SIZE)
+            except socket.timeout:
+                    print ("Python Ethernet --> Error get_data_packets: No data packet received from board, quitting")
+                    print ("Python Ethernet --> Socket was {}".format(sock_data))
+                    return []
+            except OSError:
+                print ("Python Ethernet --> Error accessing socket: No data packet received from board, quitting")
+                print ("Python Ethernet --> Socket was {}".format(sock_data))
+                sock_data.close()
+                return []
+            if (data != None):
+                incoming_packets.append(data)
+        #print (sock_data.getsockname())
+        sock_data.close()
+        formatted_data, header_dict = self.check_data_pfb(incoming_packets, "fft")
+        if (header):
+            return formatted_data, header_dict
+        else:
+            return formatted_data
+
     def check_data_adc(self, data, data_type):
         udp_packet_count = 0
         cdi_packet_count = 0
@@ -287,6 +321,7 @@ class LuSEE_ETHERNET:
             header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
             header_dict[f"{num}"]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
             header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
+            print(f"app id is {hex(formatted_data[10] & 0x7F)}")
             header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
             raw_data.extend(i[26:])
