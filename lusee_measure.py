@@ -112,7 +112,7 @@ class LuSEE_MEASURE:
         x = self.comm.get_pfb_data_sw(header = False)
         for i in range(16):
             #print([hex(j) for j in x[i]])
-            self.plot_fft(measure.twos_comp(x[i], 32))
+            self.plot_fft(self.twos_comp(x[i], 32))
 
     def get_pfb_data_test(self):
         #Need to set these
