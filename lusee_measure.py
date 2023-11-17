@@ -12,6 +12,7 @@ class LuSEE_MEASURE:
         self.comm = LuSEE_COMMS()
 
     def get_adc1_data(self):
+        self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function("ADC1")
@@ -19,6 +20,7 @@ class LuSEE_MEASURE:
         return data
 
     def get_adc2_data(self):
+        self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function("ADC2")
@@ -26,6 +28,7 @@ class LuSEE_MEASURE:
         return data
 
     def get_adc3_data(self):
+        self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function("ADC3")
@@ -33,6 +36,7 @@ class LuSEE_MEASURE:
         return data
 
     def get_adc4_data(self):
+        self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function("ADC4")
@@ -40,6 +44,7 @@ class LuSEE_MEASURE:
         return data
 
     def get_adc2_header_data(self):
+        self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function("ADC2")
@@ -47,6 +52,7 @@ class LuSEE_MEASURE:
         return data, header
 
     def get_adcs_sync(self):
+        self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function("ADC1")
@@ -61,12 +67,15 @@ class LuSEE_MEASURE:
         return data1, data2, data3, data4
 
     def get_counter_data(self, counter_num):
+        self.comm.readout_mode("fpga")
         self.comm.set_function("Counter")
         self.comm.set_counter_num(counter_num)
         data, header = self.comm.get_counter_data(header = True)
         return data, header
 
     def get_pfb_data(self):
+        #We will read from fpga output
+        self.comm.readout_mode("fpga")
         #Need to set these
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
@@ -231,8 +240,6 @@ if __name__ == "__main__":
         measure.comm.reset()
         measure.comm.reset_adc(adc = 0)
 
-    measure.comm.readout_mode("fpga")
-
     if (arg == "adc"):
         measure.comm.reset_adc(adc = 0)
         measure.comm.write_adc(adc = 0, reg = 0x25, data = 0xF4)
@@ -273,7 +280,6 @@ if __name__ == "__main__":
     #measure.comm.stop_spectrometer()
     #input("ready?")
     d = measure.get_pfb_data()
-    measure.comm.readout_mode("sw")
     e = measure.get_pfb_data_all()
     #measure.get_pfb_data_test()
 
