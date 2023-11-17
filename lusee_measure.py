@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.01
+        self.version = 1.02
 
         self.comm = LuSEE_COMMS()
 
@@ -94,25 +94,25 @@ class LuSEE_MEASURE:
         self.plot_fft(x)
 
     def get_pfb_data_all(self):
-        #Turn DDR on
-        #self.comm.connection.write_reg(0, 0x100)
-        time.sleep(1)
+        #We will read from microcontroller
+        self.comm.readout_mode("sw")
         #Need to set these
         self.comm.set_main_average(10)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
 
-        #self.comm.notch_filter_on()
-        self.comm.notch_filter_off()
+        self.comm.notch_filter_on()
+        #self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
         self.comm.set_all_index(0x1F)
 
-        x = self.comm.get_pfb_data_all(header = False)
-        print(x[0])
+        #Use this function to get all 16 correlations from the software
+        x = self.comm.get_pfb_data_sw(header = False)
         for i in range(16):
-            self.plot_fft(x[i])
+            #print([hex(j) for j in x[i]])
+            self.plot_fft(measure.twos_comp(x[i], 32))
 
     def get_pfb_data_test(self):
         #Need to set these
@@ -202,7 +202,7 @@ class LuSEE_MEASURE:
             return val
 
     def set_analog_mux(self, ch, in1, in2, gain):
-        result = self.comm.set_chan(ch, in1, in2, gain)
+        result = self.comm.set_chan_gain(ch, in1, in2, gain)
         return result
 
 if __name__ == "__main__":
@@ -256,7 +256,10 @@ if __name__ == "__main__":
 
     #measure.adc_cycle()
 
-    f = measure.set_analog_mux(0, 0, 4, "low")
+    f = measure.set_analog_mux(0, 0, 4, 0)
+    f = measure.set_analog_mux(1, 1, 4, 0)
+    f = measure.set_analog_mux(2, 2, 4, 0)
+    f = measure.set_analog_mux(3, 3, 4, 0)
     #print(f"Multiplexer array is {bin(f)}")
 
     x = measure.get_adc1_data()
@@ -264,9 +267,11 @@ if __name__ == "__main__":
     #measure.save_adc_for_simulation(x)
     measure.plot(measure.twos_comp(x, 14))
 
+    x = measure.get_adc2_data()
+    measure.plot(measure.twos_comp(x, 14))
+
     #measure.comm.stop_spectrometer()
     #input("ready?")
-    print(hex(measure.comm.connection.read_reg(0)))
     d = measure.get_pfb_data()
     measure.comm.readout_mode("sw")
     e = measure.get_pfb_data_all()

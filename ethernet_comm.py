@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.01
+        self.version = 1.02
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -28,6 +28,9 @@ class LuSEE_ETHERNET:
         self.write_register = 0x2
         self.action_register = 0x4
         self.readback_register = 0xB
+        self.tlm_reg = 43
+        self.packet_req_set = 0x2
+        self.packet_req_clear = 0xFFFFFFFD
 
         self.cdi_reset = 0x0
         self.spectrometer_reset = 0x0
@@ -175,9 +178,13 @@ class LuSEE_ETHERNET:
         time.sleep(self.wait_time)
         self.write_reg(self.action_register, 0)
 
+    def request_sw_packet(self):
+        self.write_reg(self.tlm_reg, self.read_reg(self.tlm_reg) | self.packet_req_set)
+        self.write_reg(self.tlm_reg, self.read_reg(self.tlm_reg) & self.packet_req_clear)
+
     def get_data_packets(self, data_type, num=1, header = False):
-        if ((data_type != "adc") and (data_type != "fft")):
-            print(f"Python Ethernet --> Error in 'get_data_packets': Must request 'adc' or 'fft' as 'data_type'. You requested {data_type}")
+        if ((data_type != "adc") and (data_type != "fft") and (data_type != "sw")):
+            print(f"Python Ethernet --> Error in 'get_data_packets': Must request 'adc' or 'fft' or 'sw' as 'data_type'. You requested {data_type}")
             return []
         numVal = int(num)
         #set up IPv4, UDP listening socket at requested IP
@@ -187,7 +194,11 @@ class LuSEE_ETHERNET:
         sock_data.settimeout(self.udp_timeout)
         #Read a certain amount of packets
         incoming_packets = []
-        self.start()
+        if (data_type != 'sw'):
+            self.start()
+        else:
+            self.request_sw_packet()
+
         for packet in range(0,numVal,1):
             data = []
             try:
@@ -209,40 +220,6 @@ class LuSEE_ETHERNET:
             formatted_data, header_dict = self.check_data_adc(incoming_packets, data_type)
         else:
             formatted_data, header_dict = self.check_data_pfb(incoming_packets, data_type)
-        if (header):
-            return formatted_data, header_dict
-        else:
-            return formatted_data
-
-    def get_data_packets_sw(self, num=1, header = False):
-        numVal = int(num)
-        #set up IPv4, UDP listening socket at requested IP
-        sock_data = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock_data.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock_data.bind((self.PC_IP,self.PORT_HSDATA))
-        sock_data.settimeout(self.udp_timeout)
-        #Read a certain amount of packets
-        incoming_packets = []
-        self.write_reg(43, self.read_reg(43) | 0x2)
-        self.write_reg(43, self.read_reg(43) & 0xFFFFFFFD)
-        for packet in range(0,numVal,1):
-            data = []
-            try:
-                data = sock_data.recv(self.BUFFER_SIZE)
-            except socket.timeout:
-                    print ("Python Ethernet --> Error get_data_packets: No data packet received from board, quitting")
-                    print ("Python Ethernet --> Socket was {}".format(sock_data))
-                    return []
-            except OSError:
-                print ("Python Ethernet --> Error accessing socket: No data packet received from board, quitting")
-                print ("Python Ethernet --> Socket was {}".format(sock_data))
-                sock_data.close()
-                return []
-            if (data != None):
-                incoming_packets.append(data)
-        #print (sock_data.getsockname())
-        sock_data.close()
-        formatted_data, header_dict = self.check_data_pfb(incoming_packets, "fft")
         if (header):
             return formatted_data, header_dict
         else:
@@ -321,7 +298,7 @@ class LuSEE_ETHERNET:
             header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
             header_dict[f"{num}"]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
             header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
-            print(f"app id is {hex(formatted_data[10] & 0x7F)}")
+            #print(f"app id is {hex(formatted_data[10] & 0x7F)}")
             header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
             raw_data.extend(i[26:])

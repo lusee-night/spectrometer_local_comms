@@ -3,7 +3,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.01
+        self.version = 1.02
 
         self.connection = LuSEE_ETHERNET()
 
@@ -71,6 +71,12 @@ class LuSEE_COMMS:
         self.notch_array1 = 28
         self.notch_array2 = 29
         self.notch_array3 = 30
+
+        self.data_formatter_reg = 42
+        self.cdi_data_reg = 43
+        self.control_bit = 0x4
+        self.ack_shift = 3
+        self.clear_ack = 0xFFFFFFF7
 
     #Only need to do one in the beginning
     #Takes a few seconds
@@ -334,57 +340,56 @@ class LuSEE_COMMS:
         wait_time = self.cycle_time * (2**self.avg)
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
-        time.sleep(40e-6 * (2**self.avg))
+        time.sleep(self.cycle_time * (2**self.avg))
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
 
-    def get_pfb_data_all(self, header = False):
+    def get_pfb_data_sw(self, header = False):
         #Put Python in control of readout
-        self.connection.write_reg(43, 0x4)
-        #Enable data to go to spectrometer
-        self.connection.write_reg(42, 1)
-        self.connection.write_reg(42, 0)
-        #Wait for averagering
-
-
+        self.connection.write_reg(self.cdi_data_reg, self.control_bit)
+        #On falling edge, next spectrometer output will go to microcontroller
+        self.connection.write_reg(self.data_formatter_reg, 1)
+        self.connection.write_reg(self.data_formatter_reg, 0)
         all_data = []
+        #Wait for averagering
+        wait_time = self.cycle_time * (2**self.avg)
+        if (wait_time > 1.0):
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+        time.sleep(self.cycle_time * (2**self.avg))
         #Will return all 16 correlations
         for i in range(16):
-            while((self.connection.read_reg(43) >> 3) == 0x0):
-                print("Waiting")
-            print(f"Ok, client's turn to read {hex(self.connection.read_reg(43))}")
-            data = self.connection.get_data_packets_sw(num=self.FFT_PACKETS, header = header)
+            wait_i = 0
+            #Wait for microcontroller to say that data has been returned back to CDI buffer
+            while((self.connection.read_reg(self.cdi_data_reg) >> self.ack_shift) == 0x0):
+                if (wait_i > 10):
+                    print("Flag didn't go high within 10 seconds of expected time, exiting")
+                    return all_data
+                print("Waiting for data CDI flag to go high")
+                time.sleep(1)
+                wait_i = wait_i + 1
+            print(f"Flag is high, Python can now read channel {i}")
+            #Get data from CDI microcontroller buffer
+            data = self.connection.get_data_packets(data_type='sw', num=self.FFT_PACKETS, header = header)
             all_data.append(data)
-            self.connection.write_reg(43, (self.connection.read_reg(43) & 0xFFFFFFF7))
+            #Clear the acknowledge flag to tell microcontroller to put the next correlation in the buffer
+            self.connection.write_reg(self.cdi_data_reg, (self.connection.read_reg(self.cdi_data_reg) & self.clear_ack))
         return all_data
 
-    def set_chan(self, ch, in1, in2, gain):
-        a = [None, None]
-        b = [None, None]
-        c = [None, None]
-        for num, i in enumerate([in1, in2]):
-            if (i < 4):
-                a[num] = 0 if (i == 2 or i == 0) else 1
-                b[num] = 0 if (i == 2 or i == 1) else 1
-                c[num] = 0 if (i <= 3 or i >= 0) else 1
-            else:
-                a[num] = i & 0x1
-                b[num] = (i >> 0x1) & 0x1
-                c[num] = (i >> 0x2) & 0x1
-
-        gain_a = 1 if (gain == "high") else 0
-        gain_b = 1 if (gain == "low") else 0
-
-        mux_byte = (gain_b << 7) + (gain_a << 6) + (c[1] << 5) + (b[1] << 4) + (a[1] << 3) + (c[0] << 2) + (b[0] << 1) + a[0]
+    def set_chan_gain(self, ch, in1, in2, gain):
+        chs=[2,1,0,3,4,5,6,7]
+        gains=[[2,0,1],[1,2,0],[2,0,1],[1,2,0]]
+        # pos-input is lsb side
+        c1=chs[in2]
+        # neg-input is in middle
+        c2=chs[in1]
+        # gain is msb side
+        g=gains[ch][gain]
+        mux_byte = ((g>>1) << 7) + ((g&0x1) << 6) + ((c2>>2) << 5) + (((c2>>1)&0x1) << 4) + ((c2&0x1) << 3) + ((c1>>2) << 2) + (((c1>>1)&0x1) << 1) + (c1&0x1)
         total_register = mux_byte << (ch*8)
         zeroing_mask = 0xFF << (ch*8)
-        #print(f"zeroing mask is {hex(zeroing_mask)}")
         current_val = self.connection.read_reg(self.mux_reg)
-        #print(f"current val is {hex(current_val)}")
         zeroed_val = current_val & ~zeroing_mask
-        #print(f"zeroed_val is {hex(zeroed_val)}")
         total_register = zeroed_val + total_register
-        #print(f"total_register is {hex(total_register)}")
         self.connection.write_reg(self.mux_reg, total_register)
         return total_register
 
