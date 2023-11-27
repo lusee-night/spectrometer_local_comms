@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.02
+        self.version = 1.03
 
         self.comm = LuSEE_COMMS()
 
@@ -100,13 +100,45 @@ class LuSEE_MEASURE:
         x = self.comm.get_pfb_data(header = False)
         y = [hex(i) for i in x]
 
-        self.plot_fft(x)
+        self.plot_fft(x, "A1")
+
+    def get_pfb_data_all_fpga(self):
+        #We will read from fpga output
+        self.comm.readout_mode("fpga")
+        #Need to set these
+        self.comm.set_function("FFT1")
+        self.comm.set_main_average(10)
+        self.comm.set_sticky_error(0x0)
+
+        #Notch not working yet
+        self.comm.set_notch_average(4)
+        #self.comm.notch_filter_on()
+        self.comm.notch_filter_off()
+
+        #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
+        self.comm.start_spectrometer()
+        #Select which FFT to read out
+        self.comm.select_fft("A1")
+        #Need to set these as well for each FFT you read out
+        self.comm.set_all_index(0x1F)
+
+        self.comm.reset_all_fifos()
+        self.comm.load_fft_fifos()
+
+        for i in range(16):
+            key = self.get_key(i)
+            self.comm.select_fft(key)
+            self.comm.load_fft_fifos()
+            x = self.comm.get_pfb_data(header = False)
+            y = [hex(i) for i in x]
+
+            self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
 
     def get_pfb_data_all(self):
         #We will read from microcontroller
         self.comm.readout_mode("sw")
         #Need to set these
-        self.comm.set_main_average(10)
+        self.comm.set_main_average(18)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
 
@@ -121,7 +153,7 @@ class LuSEE_MEASURE:
         x = self.comm.get_pfb_data_sw(header = False)
         for i in range(16):
             #print([hex(j) for j in x[i]])
-            self.plot_fft(self.twos_comp(x[i], 32))
+            self.plot_fft(self.twos_comp(x[i], 32), f"{self.get_key(i)}uC")
 
     def get_pfb_data_test(self):
         #Need to set these
@@ -152,14 +184,13 @@ class LuSEE_MEASURE:
 
             self.plot_fft(x)
 
-    def plot_fft(self, data):
+    def plot_fft(self, data, title):
         fig, ax = plt.subplots()
         #print(data)
         x = []
         for i in range(len(data)):
             x.append(i / 2048 * 100 / 2)
         x.reverse()
-        title = f"test"
         fig.suptitle(title, fontsize = 20)
         yaxis = "counts"
         ax.set_ylabel(yaxis, fontsize=14)
@@ -194,9 +225,14 @@ class LuSEE_MEASURE:
 
         fig.savefig (os.path.join(plot_path, f"{title}.jpg"))
 
+    def get_key(self, num):
+        for key, val in self.comm.fft_sel.items():
+            if (val == num):
+                return key
+
     def twos_comp(self, val, bits):
         """compute the 2's complement of int value val"""
-        if (len(val) > 1):
+        if (not isinstance(val, int)):
             new = []
             for i in val:
                 if (i & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
@@ -279,7 +315,8 @@ if __name__ == "__main__":
 
     #measure.comm.stop_spectrometer()
     #input("ready?")
-    d = measure.get_pfb_data()
+    #d = measure.get_pfb_data()
+    #d = measure.get_pfb_data_all_fpga()
     e = measure.get_pfb_data_all()
     #measure.get_pfb_data_test()
 

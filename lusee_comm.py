@@ -3,7 +3,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.02
+        self.version = 1.03
 
         self.connection = LuSEE_ETHERNET()
 
@@ -349,13 +349,13 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.cdi_data_reg, self.control_bit)
         #On falling edge, next spectrometer output will go to microcontroller
         self.connection.write_reg(self.data_formatter_reg, 1)
-        self.connection.write_reg(self.data_formatter_reg, 0)
         all_data = []
         #Wait for averagering
         wait_time = self.cycle_time * (2**self.avg)
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
+        self.connection.write_reg(self.data_formatter_reg, 0)
         #Will return all 16 correlations
         for i in range(16):
             wait_i = 0
