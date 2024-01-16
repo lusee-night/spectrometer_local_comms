@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.03
+        self.version = 1.04
 
         self.comm = LuSEE_COMMS()
 
@@ -288,6 +288,9 @@ if __name__ == "__main__":
     #d = measure.get_pfb_data()
 
     #measure.adc_cycle()
+
+    #Set value for red PCB
+    measure.comm.set_pcb(0)
 
     f = measure.set_analog_mux(0, 0, 4, 0)
     f = measure.set_analog_mux(1, 1, 4, 0)

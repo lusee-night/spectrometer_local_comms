@@ -8,12 +8,16 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_HK:
     def __init__(self):
+        self.version = 1.01
         #self.lusee = LuSEE_COMMON()
-        self.comm = LuSEE_COMMS()
-        self.connection = LuSEE_ETHERNET()
-        self.fpga_read   = 0x21
-        self.fpga_bank1  = 0x22
-        self.fpga_bank2  = 0x23
+        self.comm        = LuSEE_COMMS()
+        self.connection  = LuSEE_ETHERNET()
+        self.tvs_cntl    = 0x004
+        self.tvs_1_0v    = 0x005
+        self.tvs_1_8v    = 0x006
+        self.tvs_2_5v    = 0x007
+        self.tvs_temp    = 0x008
+
         self.i2c_control = 0x24
         self.i2c_address = 0x25
         self.i2c_data    = 0x26
@@ -122,21 +126,16 @@ class LuSEE_HK:
         return resp & 0xFFFF
 
     def setup_fpga_internal(self):
-        self.connection.write_reg(self.fpga_read, 0xFF)
+        self.connection.write_reg(self.tvs_cntl, 0xFF)
 
     def read_fpga_voltage(self):
-        result1 = self.connection.read_reg(self.fpga_bank1)
-        result2 = self.connection.read_reg(self.fpga_bank2)
-
-        bank1v = self.convert_volt(result1 >> 16)
-        bank1_8v = self.convert_volt(result1 & 0xFFFF)
-        bank2_5v = self.convert_volt(result2 >> 16)
+        bank1v = self.convert_volt(self.connection.read_reg(self.tvs_1_0v))
+        bank1_8v = self.convert_volt(self.connection.read_reg(self.tvs_1_8v))
+        bank2_5v = self.convert_volt(self.connection.read_reg(self.tvs_2_5v))
         return bank1v, bank1_8v, bank2_5v
 
     def read_fpga_temp(self):
-        result2 = self.connection.read_reg(self.fpga_bank2)
-        temp = self.convert_temp(result2 & 0xFFFF)
-        return temp
+        return self.convert_temp(self.connection.read_reg(self.tvs_temp))
 
     def convert_volt(self, val):
         if (val > 0xFFFF):

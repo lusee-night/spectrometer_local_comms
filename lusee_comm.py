@@ -3,9 +3,59 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.03
+        self.version = 1.04
 
         self.connection = LuSEE_ETHERNET()
+
+        self.pcb_fix = 0x002
+        self.dcb_ts_1 = 0x020
+        self.dcb_ts_2 = 0x021
+        self.sys_ts_1 = 0x022
+        self.sys_ts_2 = 0x023
+
+        self.uC_reset = 0x100
+
+        self.comm_reset = 0x200
+        self.load_data = 0x210
+        self.num_samples = 0x211
+        self.data_src_sel = 0x212
+        self.fifo_rst = 0x213
+        self.fft_select = 0x214
+        self.cdi_src_sel = 0x21F
+        self.df_enable = 0x220
+        self.df_drop_err = 0x224
+        self.df_timestamp1 = 0x230
+        self.df_timestamp2 = 0x231
+        self.client_control = 0x240
+        self.client_ack = 0x241
+
+        self.adc_readout_reset = 0x300
+        self.adc_reset = 0x301
+        self.adc_function = 0x302
+        self.adc_reg_data = 0x303
+        self.adc_clk = 0x310
+        self.adc_cntl = 0x311
+
+        self.sengine_reset = 0x400
+        self.enable_spe = 0x401
+        self.test_mode = 0x402
+        self.notch_reg = 0x410
+        self.main_average = 0x411
+        self.notch_average = 0x412
+        self.corr_array1 = 0x413
+        self.corr_array2 = 0x414
+        self.corr_array3 = 0x415
+        self.notch_array1 = 0x416
+        self.notch_array2 = 0x417
+        self.notch_array3 = 0x418
+        self.adc_min_threshold = 0x430
+        self.adc_max_threshold = 0x431
+        self.error_stick = 0x432
+
+        self.mux0_reg = 0x500
+        self.mux1_reg = 0x501
+        self.mux2_reg = 0x502
+        self.mux3_reg = 0x503
 
         self.readout_modes = {
             "FFT1": 0,
@@ -43,49 +93,48 @@ class LuSEE_COMMS:
         self.tries = 5
         self.bytes_per_packet = 0x7F8
         self.counter_num = None
-
         self.cycle_time = 40e-6
         self.avg = 0
-
         self.wait_time = 0.025
-        self.readout_register = 0x1
-        self.adc_function = 0x2
-        self.adc_reg_data = 0x3
-        self.action_register = 0x4
-        self.counter_register = 0x5
-        self.function_register = 0x6
-        self.reset_fifo_reg = 0x7
-        self.spectrometer_status = 0x9
-        self.fft_select = 10
-
-        self.mux_reg = 20
-        self.main_average = 21
-        self.notch_average = 22
-        self.sticky_error = 23
-        self.notch_reg = 24
-
-        self.corr_array1 = 25
-        self.corr_array2 = 26
-        self.corr_array3 = 27
-
-        self.notch_array1 = 28
-        self.notch_array2 = 29
-        self.notch_array3 = 30
-
-        self.data_formatter_reg = 42
-        self.cdi_data_reg = 43
-        self.control_bit = 0x4
-        self.ack_shift = 3
-        self.clear_ack = 0xFFFFFFF7
 
     #Only need to do one in the beginning
     #Takes a few seconds
     def reset(self):
         self.connection.reset()
 
-    def reset_adc(self, adc):
-        self.connection.write_reg(self.adc_function, 0x10 << int(adc))
-        self.connection.write_reg(self.adc_function, 0x0)
+    def reset_comms(self):
+        self.connection.write_reg(self.comm_reset, 1)
+
+    def uC_reset(self, reset, ddr3_reset, clk_disable):
+        reg_val = ((reset & 0x1) << 2) + ((ddr3_reset & 0x1) << 1) + (clk_disable & 0x1)
+        self.connection.write_reg(self.pcb_fix, reg_val)
+
+    def reset_adc_readout(self, adc):
+        self.connection.write_reg(self.adc_readout_reset, 1)
+
+    def reset_adc(self, adc0, adc1):
+        reg_val = ((adc1 & 0x1) << 1) + (adc0 & 0x1)
+
+    def reset_spectrometer(self):
+        self.connection.write_reg(self.sengine_reset, 1)
+
+    def set_pcb(self, board):
+        self.connection.write_reg(self.pcb_fix, board)
+
+    def read_dcb_timestamp(self):
+        lower = self.connection.read_reg(self.dcb_ts_1)
+        upper = self.connection.read_reg(self.dcb_ts_2)
+        return (upper << 32) + lower
+
+    def read_sys_timestamp(self):
+        lower = self.connection.read_reg(self.sys_ts_1)
+        upper = self.connection.read_reg(self.sys_ts_2)
+        return (upper << 32) + lower
+
+    def read_df_timestamp(self):
+        lower = self.connection.read_reg(self.df_timestamp1)
+        upper = self.connection.read_reg(self.df_timestamp2)
+        return (upper << 32) + lower
 
     def write_adc(self, adc, reg, data):
         #print(f"Reg is {reg} and data is {hex(data)}")
@@ -122,41 +171,56 @@ class LuSEE_COMMS:
             print(f"You inputted {function}")
             return
 
-        self.connection.write_reg(self.function_register, val)
+        self.connection.write_reg(self.data_src_sel, val)
 
     def readout_mode(self, mode):
         if (mode == "fpga"):
-            self.connection.write_reg(self.readout_register, 1)
+            self.connection.write_reg(self.cdi_src_sel, 1)
         elif (mode == "sw"):
-            self.connection.write_reg(self.readout_register, 0)
+            self.connection.write_reg(self.cdi_src_sel, 0)
         else:
             print(f"Python LuSEE Comm --> You need to use a readout method of 'fpga' or 'sw', you used {mode}")
 
     def set_counter_num(self, num):
         self.counter_num = int(num)
-        self.connection.write_reg(self.counter_register, int(num))
+        self.connection.write_reg(self.num_samples, int(num))
 
     def reset_all_fifos(self):
-        self.connection.write_reg(self.reset_fifo_reg, 1)
-        self.connection.write_reg(self.reset_fifo_reg, 0)
+        self.connection.write_reg(self.fifo_rst, 1)
+        self.connection.write_reg(self.fifo_rst, 0)
 
     def load_adc_fifos(self):
-        old_val = self.connection.read_reg(self.action_register)
+        old_val = self.connection.read_reg(self.load_data)
         new_val = old_val | 0x2
-        self.connection.write_reg(self.action_register, new_val)
-        self.connection.write_reg(self.action_register, old_val)
+        self.connection.write_reg(self.load_data, new_val)
+        self.connection.write_reg(self.load_data, old_val)
 
     def load_fft_fifos(self):
-        old_val = self.connection.read_reg(self.action_register)
+        old_val = self.connection.read_reg(self.load_data)
         new_val = old_val | 0x4
-        self.connection.write_reg(self.action_register, new_val)
-        self.connection.write_reg(self.action_register, old_val)
+        self.connection.write_reg(self.load_data, new_val)
+        self.connection.write_reg(self.load_data, old_val)
+
+    def get_df_drop_err(self):
+        return self.connection.read_reg(self.df_drop_err)
+
+    def set_adc_clock(self, val):
+        self.connection.write_reg(self.adc_clk, int(val))
+
+    def set_adc_powerdown(self, val):
+        self.connection.write_reg(self.adc_cntl, int(val))
 
     def start_spectrometer(self):
-        self.connection.write_reg(self.spectrometer_status, 1)
+        self.connection.write_reg(self.enable_spe, 1)
 
     def stop_spectrometer(self):
-        self.connection.write_reg(self.spectrometer_status, 0)
+        self.connection.write_reg(self.enable_spe, 0)
+
+    def spectrometer_test_mode(self, val):
+        if (val):
+            self.connection.write_reg(self.test_mode, 1)
+        else:
+            self.connection.write_reg(self.test_mode, 0)
 
     def select_fft(self, fft_style):
         try:
@@ -177,15 +241,18 @@ class LuSEE_COMMS:
         avg_num = int(avg)
         self.connection.write_reg(self.notch_average, avg_num)
 
-    def set_sticky_error(self, sticky):
-        stick = int(sticky)
-        self.connection.write_reg(self.sticky_error, stick)
-
     def notch_filter_on(self):
         self.connection.write_reg(self.notch_reg, 1)
 
     def notch_filter_off(self):
         self.connection.write_reg(self.notch_reg, 0)
+
+    def set_adc_threshold(self, adc_min, adc_max):
+        self.connection.write_reg(self.adc_min_threshold, int(adc_min))
+        self.connection.write_reg(self.adc_max_threshold, int(adc_max))
+
+    def set_sticky_error(self, sticky):
+        self.connection.write_reg(self.error_stick, int(sticky))
 
     def set_all_index(self, val):
         for key in self.fft_sel:
@@ -348,23 +415,28 @@ class LuSEE_COMMS:
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
 
-    def get_pfb_data_sw(self, header = False):
+    def get_pfb_data_sw(self, header = False, test = False):
         #Put Python in control of readout
-        self.connection.write_reg(self.cdi_data_reg, self.control_bit)
-        #On falling edge, next spectrometer output will go to microcontroller
-        self.connection.write_reg(self.data_formatter_reg, 1)
+        self.connection.write_reg(self.client_control, 1)
+        #Spectrometer outputs will go to microcontroller
+        if (test):
+            #Enables the test bit as well
+            self.connection.write_reg(self.df_enable, 3)
+        else:
+            self.connection.write_reg(self.df_enable, 1)
         all_data = []
         #Wait for averagering
         wait_time = self.cycle_time * (2**self.avg)
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
-        self.connection.write_reg(self.data_formatter_reg, 0)
+        #Stop sending spectrometer data to microcontroller
+        self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
         for i in range(16):
             wait_i = 0
             #Wait for microcontroller to say that data has been returned back to CDI buffer
-            while((self.connection.read_reg(self.cdi_data_reg) >> self.ack_shift) == 0x0):
+            while(self.connection.read_reg(self.client_ack) == 0x0):
                 if (wait_i > 10):
                     print("Flag didn't go high within 10 seconds of expected time, exiting")
                     return all_data
@@ -376,7 +448,7 @@ class LuSEE_COMMS:
             data = self.connection.get_data_packets(data_type='sw', num=self.FFT_PACKETS, header = header)
             all_data.append(data)
             #Clear the acknowledge flag to tell microcontroller to put the next correlation in the buffer
-            self.connection.write_reg(self.cdi_data_reg, (self.connection.read_reg(self.cdi_data_reg) & self.clear_ack))
+            self.connection.write_reg(self.client_ack, 0)
         return all_data
 
     def set_chan_gain(self, ch, in1, in2, gain):
@@ -389,12 +461,15 @@ class LuSEE_COMMS:
         # gain is msb side
         g=gains[ch][gain]
         mux_byte = ((g>>1) << 7) + ((g&0x1) << 6) + ((c2>>2) << 5) + (((c2>>1)&0x1) << 4) + ((c2&0x1) << 3) + ((c1>>2) << 2) + (((c1>>1)&0x1) << 1) + (c1&0x1)
-        total_register = mux_byte << (ch*8)
-        zeroing_mask = 0xFF << (ch*8)
-        current_val = self.connection.read_reg(self.mux_reg)
-        zeroed_val = current_val & ~zeroing_mask
-        total_register = zeroed_val + total_register
-        self.connection.write_reg(self.mux_reg, total_register)
+
+        if (ch == 0):
+            self.connection.write_reg(self.mux0_reg, mux_byte)
+        elif (ch == 1):
+            self.connection.write_reg(self.mux1_reg, mux_byte)
+        elif (ch == 2):
+            self.connection.write_reg(self.mux2_reg, mux_byte)
+        elif (ch == 3):
+            self.connection.write_reg(self.mux3_reg, mux_byte)
         return total_register
 
 if __name__ == "__main__":

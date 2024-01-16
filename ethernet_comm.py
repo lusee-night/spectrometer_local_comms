@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.02
+        self.version = 1.03
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -24,13 +24,14 @@ class LuSEE_ETHERNET:
         self.FOOTER = 0xFFFF
 
         self.wait_time = 0.01
+
+        self.start_tlm_data = 0x210
+        self.tlm_reg = 0x218
+
         self.latch_register = 0x1
         self.write_register = 0x2
         self.action_register = 0x4
         self.readback_register = 0xB
-        self.tlm_reg = 43
-        self.packet_req_set = 0x2
-        self.packet_req_clear = 0xFFFFFFFD
 
         self.cdi_reset = 0x0
         self.spectrometer_reset = 0x0
@@ -174,13 +175,13 @@ class LuSEE_ETHERNET:
             print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
 
     def start(self):
-        self.write_reg(self.action_register, 1)
+        self.write_reg(self.start_tlm_data, 1)
         time.sleep(self.wait_time)
-        self.write_reg(self.action_register, 0)
+        self.write_reg(self.start_tlm_data, 0)
 
     def request_sw_packet(self):
-        self.write_reg(self.tlm_reg, self.read_reg(self.tlm_reg) | self.packet_req_set)
-        self.write_reg(self.tlm_reg, self.read_reg(self.tlm_reg) & self.packet_req_clear)
+        self.write_reg(self.tlm_reg, 1)
+        self.write_reg(self.tlm_reg, 0)
 
     def get_data_packets(self, data_type, num=1, header = False):
         if ((data_type != "adc") and (data_type != "fft") and (data_type != "sw")):

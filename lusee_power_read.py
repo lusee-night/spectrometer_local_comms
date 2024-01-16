@@ -16,6 +16,7 @@ class POWER_TEST:
 
 class LuSEE_POWER:
     def __init__(self, name):
+        self.version = 1.01
         self.hk = LuSEE_HK()
         self.comm = LuSEE_COMMS()
         self.name = name
