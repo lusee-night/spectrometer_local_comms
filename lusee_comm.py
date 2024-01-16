@@ -141,12 +141,16 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.reset_fifo_reg, 0)
 
     def load_adc_fifos(self):
-        self.connection.write_reg(self.action_register, 2)
-        self.connection.write_reg(self.action_register, 0)
+        old_val = self.connection.read_reg(self.action_register)
+        new_val = old_val | 0x2
+        self.connection.write_reg(self.action_register, new_val)
+        self.connection.write_reg(self.action_register, old_val)
 
     def load_fft_fifos(self):
-        self.connection.write_reg(self.action_register, 4)
-        self.connection.write_reg(self.action_register, 0)
+        old_val = self.connection.read_reg(self.action_register)
+        new_val = old_val | 0x4
+        self.connection.write_reg(self.action_register, new_val)
+        self.connection.write_reg(self.action_register, old_val)
 
     def start_spectrometer(self):
         self.connection.write_reg(self.spectrometer_status, 1)

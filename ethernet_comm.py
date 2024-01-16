@@ -298,7 +298,7 @@ class LuSEE_ETHERNET:
             header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
             header_dict[f"{num}"]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
             header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
-            #print(f"app id is {hex(formatted_data[10] & 0x7F)}")
+            print(f"app id is {hex(formatted_data[10] & 0x7F)}")
             header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
             raw_data.extend(i[26:])

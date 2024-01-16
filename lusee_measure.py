@@ -91,14 +91,17 @@ class LuSEE_MEASURE:
         #Select which FFT to read out
         self.comm.select_fft("A1")
         #Need to set these as well for each FFT you read out
-        self.comm.set_index_array("A1", 0x1F, "main")
-        self.comm.set_index_array("A1", 0x1F, "notch")
+        self.comm.set_index_array("A1", 0x10, "main")
+        self.comm.set_index_array("A1", 0x10, "notch")
 
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
         x = self.comm.get_pfb_data(header = False)
         y = [hex(i) for i in x]
+        print(y)
+        # for i in range(len(y)):
+        #     print(f"{i}:{y[i]}")
 
         self.plot_fft(x, "A1")
 
@@ -120,69 +123,56 @@ class LuSEE_MEASURE:
         #Select which FFT to read out
         self.comm.select_fft("A1")
         #Need to set these as well for each FFT you read out
-        self.comm.set_all_index(0x1F)
-
+        self.comm.set_all_index(0x10)
+        self.comm.connection.write_reg(4, 0x8)
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
         for i in range(16):
             key = self.get_key(i)
             self.comm.select_fft(key)
+            self.comm.connection.write_reg(4, 0x8)
             self.comm.load_fft_fifos()
             x = self.comm.get_pfb_data(header = False)
             y = [hex(i) for i in x]
-
-            self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
+            if (i == 0):
+                print(y)
+                self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
+            #self.check_test_vals(x, i)
+            #self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
 
     def get_pfb_data_all(self):
         #We will read from microcontroller
         self.comm.readout_mode("sw")
         #Need to set these
-        self.comm.set_main_average(18)
+        self.comm.set_main_average(10)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
 
-        self.comm.notch_filter_on()
-        #self.comm.notch_filter_off()
-
-        #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
-        self.comm.start_spectrometer()
-        self.comm.set_all_index(0x1F)
-
-        #Use this function to get all 16 correlations from the software
-        x = self.comm.get_pfb_data_sw(header = False)
-        for i in range(16):
-            #print([hex(j) for j in x[i]])
-            self.plot_fft(self.twos_comp(x[i], 32), f"{self.get_key(i)}uC")
-
-    def get_pfb_data_test(self):
-        #Need to set these
-        self.comm.set_function("FFT1")
-        self.comm.set_sticky_error(0x0)
-
-        #Notch not working yet
-        self.comm.set_notch_average(4)
         #self.comm.notch_filter_on()
         self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
-        #Select which FFT to read out
-        self.comm.select_fft("A1")
-        #Need to set these as well for each FFT you read out
-        self.comm.set_index_array("A1", 0x1F, "main")
-        self.comm.set_index_array("A1", 0x1F, "notch")
+        self.comm.set_all_index(0x10)
+        self.comm.connection.write_reg(4, 0x8)
+        #Use this function to get all 16 correlations from the software
+        x = self.comm.get_pfb_data_sw(header = False)
+        y = [hex(i) for i in x[0]]
+        print(y)
+        # for i in range(len(y)):
+        #     print(f"-{i}:{y[i]}-", end="")
+        for i in range(16):
+            #print([hex(j) for j in x[i]])
+            #self.check_test_vals(x[i], i)
+            self.plot_fft(self.twos_comp(x[i], 32), f"{self.get_key(i)}uC")
 
-        for i in range(21):
-            print(f"Average setting is {i}")
-            self.comm.set_main_average(i)
-            self.comm.reset_all_fifos()
-            self.comm.load_fft_fifos()
-
-            x = self.comm.get_pfb_data(header = False)
-            y = [hex(i) for i in x]
-
-            self.plot_fft(x)
+    def check_test_vals(self, data, ch):
+        start_val = 0 + (2048 * ch)
+        end_val = start_val + 2047
+        for num,i in enumerate(range(start_val, end_val+1)):
+            if (data[num] != i):
+                print(f"Test data error: Val should be {hex(i)}, but is {data[num]}")
 
     def plot_fft(self, data, title):
         fig, ax = plt.subplots()
@@ -308,16 +298,16 @@ if __name__ == "__main__":
     x = measure.get_adc1_data()
     #print(x)
     #measure.save_adc_for_simulation(x)
-    measure.plot(measure.twos_comp(x, 14))
+    #measure.plot(measure.twos_comp(x, 14))
 
     x = measure.get_adc2_data()
-    measure.plot(measure.twos_comp(x, 14))
+    #measure.plot(measure.twos_comp(x, 14))
 
     #measure.comm.stop_spectrometer()
     #input("ready?")
     #d = measure.get_pfb_data()
-    #d = measure.get_pfb_data_all_fpga()
+    d = measure.get_pfb_data_all_fpga()
+    input("ready?")
     e = measure.get_pfb_data_all()
-    #measure.get_pfb_data_test()
 
     #You can save/plot the output data however you wish!
