@@ -470,7 +470,7 @@ class LuSEE_COMMS:
             self.connection.write_reg(self.mux2_reg, mux_byte)
         elif (ch == 3):
             self.connection.write_reg(self.mux3_reg, mux_byte)
-        return total_register
+        return mux_byte
 
 if __name__ == "__main__":
     #arg = sys.argv[1]

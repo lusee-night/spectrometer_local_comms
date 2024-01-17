@@ -135,11 +135,11 @@ class LuSEE_MEASURE:
             self.comm.load_fft_fifos()
             x = self.comm.get_pfb_data(header = False)
             y = [hex(i) for i in x]
-            if (i == 0):
-                print(y)
-                self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
+            # if (i == 0):
+            #     print(y)
+            #     self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
             #self.check_test_vals(x, i)
-            #self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
+            self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
 
     def get_pfb_data_all(self):
         #We will read from microcontroller
@@ -148,6 +148,7 @@ class LuSEE_MEASURE:
         self.comm.set_main_average(10)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
+        self.comm.spectrometer_test_mode(1)
 
         #self.comm.notch_filter_on()
         self.comm.notch_filter_off()
@@ -250,12 +251,12 @@ if __name__ == "__main__":
     measure.comm.connection.write_cdi_reg(5, 69)
     resp = measure.comm.connection.read_cdi_reg(5)
     if (resp == 69):
-        print("[TEST]", "Communication to DCB Emulator is ok")
+        print("[TEST] Communication to DCB Emulator is ok")
     else:
-        sys.exit("[TEST]", "Communication to DCB Emulator is not ok")
+        sys.exit("[TEST] Communication to DCB Emulator is not ok")
 
-    measure.comm.connection.write_reg(5, 69)
-    resp = measure.comm.connection.read_reg(5)
+    measure.comm.connection.write_reg(0x120, 69)
+    resp = measure.comm.connection.read_reg(0x120)
     if (resp == 69):
         print("[TEST]", "Communication to Spectrometer Board is ok")
     else:
@@ -289,8 +290,9 @@ if __name__ == "__main__":
 
     #measure.adc_cycle()
 
-    #Set value for red PCB
-    measure.comm.set_pcb(0)
+    #0 is red pcb
+    #1 is green pcb
+    measure.comm.set_pcb(1)
 
     f = measure.set_analog_mux(0, 0, 4, 0)
     f = measure.set_analog_mux(1, 1, 4, 0)
@@ -309,8 +311,8 @@ if __name__ == "__main__":
     #measure.comm.stop_spectrometer()
     #input("ready?")
     #d = measure.get_pfb_data()
-    d = measure.get_pfb_data_all_fpga()
-    input("ready?")
+    #d = measure.get_pfb_data_all_fpga()
+    #input("ready?")
     e = measure.get_pfb_data_all()
 
     #You can save/plot the output data however you wish!
