@@ -106,32 +106,38 @@ class LuSEE_MEASURE:
         self.plot_fft(x, "A1")
 
     def get_pfb_data_all_fpga(self):
+        #0 is red pcb
+        #1 is green pcb
+        self.comm.set_pcb(1)
+
+        #Set analog multiplexer scheme
+        self.set_analog_mux(0, 0, 4, 0)
+        self.set_analog_mux(1, 1, 4, 0)
+        self.set_analog_mux(2, 2, 4, 0)
+        self.set_analog_mux(3, 3, 4, 0)
+
         #We will read from fpga output
         self.comm.readout_mode("fpga")
         #Need to set these
         self.comm.set_function("FFT1")
         self.comm.set_main_average(10)
-        self.comm.set_sticky_error(0x0)
-
-        #Notch not working yet
         self.comm.set_notch_average(4)
-        #self.comm.notch_filter_on()
-        self.comm.notch_filter_off()
+        self.comm.set_sticky_error(0x0)
+        self.comm.notch_filter_on()
+        #self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
         #Select which FFT to read out
         self.comm.select_fft("A1")
-        #Need to set these as well for each FFT you read out
+        #Need to set index as well for each FFT you read out
         self.comm.set_all_index(0x10)
-        self.comm.connection.write_reg(4, 0x8)
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
         for i in range(16):
             key = self.get_key(i)
             self.comm.select_fft(key)
-            self.comm.connection.write_reg(4, 0x8)
             self.comm.load_fft_fifos()
             x = self.comm.get_pfb_data(header = False)
             y = [hex(i) for i in x]
@@ -139,34 +145,46 @@ class LuSEE_MEASURE:
             #     print(y)
             #     self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
             #self.check_test_vals(x, i)
-            self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
+            self.plot_fft(self.twos_comp(x, 32), f"{key}_fpga")
+        # print(self.comm.read_dcb_timestamp())
+        # print(self.comm.read_sys_timestamp())
+        # print(self.comm.read_df_timestamp())
+        # print(self.comm.get_df_drop_err())
 
-    def get_pfb_data_all(self):
+    def get_pfb_data_sw(self):
+        #0 is red pcb
+        #1 is green pcb
+        self.comm.set_pcb(1)
+
+        #Set analog multiplexer scheme
+        self.set_analog_mux(0, 0, 4, 0)
+        self.set_analog_mux(1, 1, 4, 0)
+        self.set_analog_mux(2, 2, 4, 0)
+        self.set_analog_mux(3, 3, 4, 0)
+
         #We will read from microcontroller
         self.comm.readout_mode("sw")
         #Need to set these
         self.comm.set_main_average(10)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
-        self.comm.spectrometer_test_mode(1)
-
-        #self.comm.notch_filter_on()
-        self.comm.notch_filter_off()
+        #self.comm.spectrometer_test_mode(0)
+        self.comm.notch_filter_on()
+        #self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
         self.comm.set_all_index(0x10)
-        self.comm.connection.write_reg(4, 0x8)
         #Use this function to get all 16 correlations from the software
         x = self.comm.get_pfb_data_sw(header = False)
-        y = [hex(i) for i in x[0]]
-        print(y)
+        #y = [hex(i) for i in x[0]]
+        #print(y)
         # for i in range(len(y)):
         #     print(f"-{i}:{y[i]}-", end="")
         for i in range(16):
             #print([hex(j) for j in x[i]])
             #self.check_test_vals(x[i], i)
-            self.plot_fft(self.twos_comp(x[i], 32), f"{self.get_key(i)}uC")
+            self.plot_fft(self.twos_comp(x[i], 32), f"{self.get_key(i)}_uC")
 
     def check_test_vals(self, data, ch):
         start_val = 0 + (2048 * ch)
@@ -290,22 +308,14 @@ if __name__ == "__main__":
 
     #measure.adc_cycle()
 
-    #0 is red pcb
-    #1 is green pcb
-    measure.comm.set_pcb(1)
-
-    f = measure.set_analog_mux(0, 0, 4, 0)
-    f = measure.set_analog_mux(1, 1, 4, 0)
-    f = measure.set_analog_mux(2, 2, 4, 0)
-    f = measure.set_analog_mux(3, 3, 4, 0)
     #print(f"Multiplexer array is {bin(f)}")
 
-    x = measure.get_adc1_data()
+    #x = measure.get_adc1_data()
     #print(x)
     #measure.save_adc_for_simulation(x)
     #measure.plot(measure.twos_comp(x, 14))
 
-    x = measure.get_adc2_data()
+    #x = measure.get_adc2_data()
     #measure.plot(measure.twos_comp(x, 14))
 
     #measure.comm.stop_spectrometer()
@@ -313,6 +323,6 @@ if __name__ == "__main__":
     #d = measure.get_pfb_data()
     #d = measure.get_pfb_data_all_fpga()
     #input("ready?")
-    e = measure.get_pfb_data_all()
+    e = measure.get_pfb_data_sw()
 
     #You can save/plot the output data however you wish!
