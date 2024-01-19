@@ -3,7 +3,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.04
+        self.version = 1.05
 
         self.connection = LuSEE_ETHERNET()
 
@@ -415,7 +415,9 @@ class LuSEE_COMMS:
         data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
         return data
 
-    def get_pfb_data_sw(self, header = False, test = False):
+    def get_pfb_data_sw(self, header = False, avg = None, test = False):
+        if (avg != None):
+            self.avg = avg
         #Put Python in control of readout
         self.connection.write_reg(self.client_control, 1)
         #Spectrometer outputs will go to microcontroller
@@ -431,7 +433,7 @@ class LuSEE_COMMS:
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
         #Stop sending spectrometer data to microcontroller
-        self.connection.write_reg(self.df_enable, 0)
+        #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
         for i in range(16):
             wait_i = 0
