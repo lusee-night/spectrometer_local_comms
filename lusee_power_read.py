@@ -133,12 +133,12 @@ class LuSEE_POWER:
         self.tests = []
         self.tests.append(POWER_TEST(name = "0x0", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         self.tests.append(POWER_TEST(name = "0x100", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x200", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x300", reg0_val = 0x300, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x400", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x500", reg0_val = 0x500, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x600", reg0_val = 0x600, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x700", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "0x200", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "0x300", reg0_val = 0x300, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "0x400", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "0x500", reg0_val = 0x500, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "0x600", reg0_val = 0x600, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
+        # self.tests.append(POWER_TEST(name = "0x700", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Spectrometer only", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
         # self.tests.append(POWER_TEST(name = "Notch correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFF))
@@ -233,10 +233,10 @@ class LuSEE_POWER:
         #Does the typical initialization of the FPGA for spectrometer usage
         self.comm.reset()
         #Analog multiplexers connect channel 0 to input 0 with low gain
-        f = self.comm.set_chan(0, 0, 4, "low")
-        f = self.comm.set_chan(1, 1, 4, "high")
-        f = self.comm.set_chan(2, 2, 4, "low")
-        f = self.comm.set_chan(3, 3, 4, "high")
+        f = self.comm.set_chan_gain(0, 0, 4, 0)
+        f = self.comm.set_chan_gain(1, 1, 4, 0)
+        f = self.comm.set_chan_gain(2, 2, 4, 0)
+        f = self.comm.set_chan_gain(3, 3, 4, 0)
 
         #Spectrometer settings
         self.comm.set_function("FFT1")
@@ -502,8 +502,8 @@ if __name__ == "__main__":
     else:
         sys.exit("[TEST] -> Communication to DCB Emulator is not ok")
 
-    comm.connection.write_reg(5, 69)
-    resp = comm.connection.read_reg(5)
+    comm.connection.write_reg(0x120, 69)
+    resp = comm.connection.read_reg(0x120)
     if (resp == 69):
         print("[TEST]", "Communication to Spectrometer Board is ok")
     else:

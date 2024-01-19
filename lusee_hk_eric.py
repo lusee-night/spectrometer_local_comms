@@ -18,10 +18,12 @@ class LuSEE_HK:
         self.tvs_2_5v    = 0x007
         self.tvs_temp    = 0x008
 
-        self.i2c_control = 0x24
-        self.i2c_address = 0x25
-        self.i2c_data    = 0x26
-        self.i2c_status  = 0x27
+        self.i2c_strb    = 0x010
+        self.i2c_num_bytes = 0x011
+        self.i2c_dev_addr = 0x012
+        self.i2c_address = 0x013
+        self.i2c_din     = 0x014
+        self.i2c_dout_status = 0x015
 
         #Current monitor
         #https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
@@ -78,12 +80,12 @@ class LuSEE_HK:
 
     def check_i2c_status(self):
         while True:
-            val=self.connection.read_reg(self.i2c_status)
-            if (((val>>31)&0x1)==1):
-                print ('LuSEE_HK --> Core busy')
+            val=self.connection.read_reg(self.i2c_dout_status)
+            if (((val>>16)&0x1)==1):
+                print (f'LuSEE_HK --> Core busy: {hex(val)}')
                 time.sleep (1.01)
-            # elif (((val>>30)&0x1)==1):
-            #     print ('LuSEE_HK --> Device Unavailable')
+            # elif (((val>>17)&0x1)==1):
+            #     print (f'LuSEE_HK --> Device Unavailable: {hex(val)}')
             #     time.sleep (1.01)
             else:
                 break
@@ -93,16 +95,15 @@ class LuSEE_HK:
         self.check_i2c_status()
 
         #Prepare write operation with all parameters
-        value = (dev_address << 16) + num_bytes
-        self.connection.write_reg(self.i2c_control, value)
-        self.connection.write_reg(self.i2c_address, i2c_address)
-        self.connection.write_reg(self.i2c_data, i2c_data)
+        self.connection.write_reg(self.i2c_num_bytes, num_bytes & 0xF)
+        self.connection.write_reg(self.i2c_dev_addr, dev_address & 0x7F)
+        self.connection.write_reg(self.i2c_address, i2c_address & 0xFF)
+        self.connection.write_reg(self.i2c_din, i2c_data)
 
         #Start write operation
-        wdata = value | (1<<30)
-        self.connection.write_reg(self.i2c_control, wdata)
+        self.connection.write_reg(self.i2c_strb, 1)
         #Stop write operation
-        self.connection.write_reg(self.i2c_control, value)
+        self.connection.write_reg(self.i2c_strb, 0)
 
     def read_i2c(self, dev_address, num_bytes, i2c_address):
         #Make sure I2C state machine is idle
@@ -112,18 +113,16 @@ class LuSEE_HK:
         self.check_i2c_status()
 
         #Prepare write operation
-        value = (dev_address << 16) + num_bytes
-        self.connection.write_reg(self.i2c_control, value)
-        self.connection.write_reg(self.i2c_address, i2c_address)
+        self.connection.write_reg(self.i2c_num_bytes, num_bytes & 0xF)
+        self.connection.write_reg(self.i2c_dev_addr, dev_address & 0x7F)
+        self.connection.write_reg(self.i2c_address, i2c_address & 0xFF)
 
         #Start read operation
-        rdata = value | (1<<31)
-        self.connection.write_reg(self.i2c_control, rdata)
+        self.connection.write_reg(self.i2c_strb, 2)
         #Stop read operation
-        self.connection.write_reg(self.i2c_control, value)
-        #FPGA top 2 bytes are other info
-        resp = self.connection.read_reg(self.i2c_status)
-        return resp & 0xFFFF
+        self.connection.write_reg(self.i2c_strb, 0)
+        #FPGA bottom 2 bytes are the actual data
+        return self.connection.read_reg(self.i2c_dout_status) & 0xFFFF
 
     def setup_fpga_internal(self):
         self.connection.write_reg(self.tvs_cntl, 0xFF)
