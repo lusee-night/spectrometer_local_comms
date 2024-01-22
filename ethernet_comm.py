@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.03
+        self.version = 1.04
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -207,12 +207,18 @@ class LuSEE_ETHERNET:
             except socket.timeout:
                     print ("Python Ethernet --> Error get_data_packets: No data packet received from board, quitting")
                     print ("Python Ethernet --> Socket was {}".format(sock_data))
-                    return []
+                    if (header):
+                        return [], []
+                    else:
+                        return []
             except OSError:
                 print ("Python Ethernet --> Error accessing socket: No data packet received from board, quitting")
                 print ("Python Ethernet --> Socket was {}".format(sock_data))
                 sock_data.close()
-                return []
+                if (header):
+                    return [], []
+                else:
+                    return []
             if (data != None):
                 incoming_packets.append(data)
         #print (sock_data.getsockname())
@@ -238,24 +244,24 @@ class LuSEE_ETHERNET:
         even = True;
         carry_val = 0;
         for num,i in enumerate(data):
-            header_dict[f"{num}"] = {}
+            header_dict[num] = {}
             unpack_buffer = int((len(i))/2)
             #Unpacking into shorts in increments of 2 bytes
             formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
 
             #print(formatted_data)
             udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
-            header_dict[f"{num}"]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
-            header_dict[f"{num}"]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
-            header_dict[f"{num}"]["message_id"] = (formatted_data[8] >> 10)
+            header_dict[num]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
+            header_dict[num]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
+            header_dict[num]["message_id"] = (formatted_data[8] >> 10)
 
 
-            header_dict[f"{num}"]["message_spare"] = formatted_data[9]
-            header_dict[f"{num}"]["ccsds_version"] = formatted_data[10] >> 13
-            header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
-            header_dict[f"{num}"]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
-            header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
-            header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
+            header_dict[num]["message_spare"] = formatted_data[9]
+            header_dict[num]["ccsds_version"] = formatted_data[10] >> 13
+            header_dict[num]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
+            header_dict[num]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
+            header_dict[num]["ccsds_appid"] = formatted_data[10] & 0x7F
+            header_dict[num]["ccsds_groupflags"] = formatted_data[11] >> 14
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
 
             #ADC data is simple, it's the 16 bit shorts that were already unpacked
@@ -276,7 +282,7 @@ class LuSEE_ETHERNET:
         carry_val = 0;
         raw_data = bytearray()
         for num,i in enumerate(data):
-            header_dict[f"{num}"] = {}
+            header_dict[num] = {}
             #print(f"Length is {len(i)}")
             unpack_buffer = int((len(i))/4)
             #Unpacking into shorts in increments of 2 bytes just for the header
@@ -289,18 +295,18 @@ class LuSEE_ETHERNET:
 
             #print(formatted_data)
             udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
-            header_dict[f"{num}"]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
-            header_dict[f"{num}"]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
-            header_dict[f"{num}"]["message_id"] = (formatted_data[8] >> 10)
+            header_dict[num]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
+            header_dict[num]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
+            header_dict[num]["message_id"] = (formatted_data[8] >> 10)
 
 
-            header_dict[f"{num}"]["message_spare"] = formatted_data[9]
-            header_dict[f"{num}"]["ccsds_version"] = formatted_data[10] >> 13
-            header_dict[f"{num}"]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
-            header_dict[f"{num}"]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
-            header_dict[f"{num}"]["ccsds_appid"] = formatted_data[10] & 0x7F
-            #print(f"app id is {hex(formatted_data[10] & 0x7F)}")
-            header_dict[f"{num}"]["ccsds_groupflags"] = formatted_data[11] >> 14
+            header_dict[num]["message_spare"] = formatted_data[9]
+            header_dict[num]["ccsds_version"] = formatted_data[10] >> 13
+            header_dict[num]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
+            header_dict[num]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
+            header_dict[num]["ccsds_appid"] = formatted_data[10] & 0x7F
+            print(f"APID is {hex(formatted_data[10] & 0x7F)}")
+            header_dict[num]["ccsds_groupflags"] = formatted_data[11] >> 14
             ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
             raw_data.extend(i[26:])
 

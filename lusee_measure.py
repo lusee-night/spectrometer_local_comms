@@ -7,7 +7,8 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.05
+        self.version = 1.06
+        self.scratchpad_2 = 0x121
 
         self.comm = LuSEE_COMMS()
 
@@ -166,7 +167,7 @@ class LuSEE_MEASURE:
         #We will read from microcontroller
         self.comm.readout_mode("sw")
         #Need to set these
-        self.comm.set_main_average(16)
+        self.comm.set_main_average(12)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
         #self.comm.spectrometer_test_mode(0)
@@ -176,8 +177,27 @@ class LuSEE_MEASURE:
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
         self.comm.set_all_index(0x10)
-        #Use this function to get all 16 correlations from the software
-        x = self.comm.get_pfb_data_sw(header = False)
+
+        data_good = False
+        errors = 0
+        while (not data_good):
+            #Use this function to get all 16 correlations from the software
+            x = self.comm.get_pfb_data_sw(header = False)
+            #If there was an error with receiving data, it means you don't have all 16 channel subarrays
+            #Or at least one of them is empty
+            if (len(x) == 16 and (len(i) != 0 for i in x)):
+                data_good = True
+            else:
+                errors += 1
+                print(f"Length of 16 ch array is {len(x)}")
+                for i in range(16):
+                    try:
+                        print(f"Length of data channel {i} is {len(x[i])}")
+                    except:
+                        pass
+            if (errors > 10):
+                print("More than 10 errors in lusee_measure, exiting")
+                break
         #y = [hex(i) for i in x[0]]
         #print(y)
         # for i in range(len(y)):
@@ -277,10 +297,10 @@ if __name__ == "__main__":
     measure.comm.connection.write_reg(0x120, 69)
     resp = measure.comm.connection.read_reg(0x120)
     if (resp == 69):
-        print("[TEST]", "Communication to Spectrometer Board is ok")
+        print("[TEST] Communication to Spectrometer Board is ok")
     else:
         print(resp)
-        sys.exit("[TEST]", "Communication to Spectrometer Board is not ok")
+        sys.exit("[TEST] Communication to Spectrometer Board is not ok")
 
     if (arg == "reset"):
         measure.comm.reset()
