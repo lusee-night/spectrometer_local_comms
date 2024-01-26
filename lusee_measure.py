@@ -170,7 +170,7 @@ class LuSEE_MEASURE:
         self.comm.set_main_average(12)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
-        #self.comm.spectrometer_test_mode(0)
+        self.comm.spectrometer_test_mode(1)
         self.comm.notch_filter_on()
         #self.comm.notch_filter_off()
 
@@ -313,8 +313,22 @@ if __name__ == "__main__":
         print(hex(resp))
         print(hex(resp >> 16))
 
-    # x = measure.get_adc1_data()
-    # measure.plot(measure.twos_comp(x, 14))
+    measure.set_analog_mux(0, 0, 4, 0)
+    measure.set_analog_mux(1, 1, 4, 0)
+    measure.set_analog_mux(2, 2, 4, 0)
+    measure.set_analog_mux(3, 3, 4, 0)
+
+    x = measure.get_adc1_data()
+    measure.plot(measure.twos_comp(x, 14))
+
+    x = measure.get_adc2_data()
+    measure.plot(measure.twos_comp(x, 14))
+
+    x = measure.get_adc3_data()
+    measure.plot(measure.twos_comp(x, 14))
+
+    x = measure.get_adc4_data()
+    measure.plot(measure.twos_comp(x, 14))
     #
     # a,b = measure.get_adc2_header_data()
     # print(b)

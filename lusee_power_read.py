@@ -7,12 +7,11 @@ from lusee_comm import LuSEE_COMMS
 
 #A class for each test so we can easily loop through them pick out these properties
 class POWER_TEST:
-    def __init__(self, name, reg0_val, reg1_val, reg2_val, reg3_val):
+    def __init__(self, name, uc_disable, adc_disable, spe_enable):
         self.name = name
-        self.reg0_val = reg0_val
-        self.reg1_val = reg1_val
-        self.reg2_val = reg2_val
-        self.reg3_val = reg3_val
+        self.uc_disable = uc_disable
+        self.adc_disable = adc_disable
+        self.spe_enable = spe_enable
 
 class LuSEE_POWER:
     def __init__(self, name):
@@ -52,9 +51,10 @@ class LuSEE_POWER:
         self.delay = 5
 
         #Various registers and disable bits for part of the spectrometer
-        self.ud_ddr_disable = 0x0
+        self.uc_disable      = 0x100
+        self.adc_disable     = 0x301
+        self.spe_enable     = 0x401
 
-        self.SPE_disable     = 40
         self.weight_streamer = 0b1
         self.weight_fold1    = 0b10
         self.weight_fold2    = 0b100
@@ -131,32 +131,10 @@ class LuSEE_POWER:
         #Tests are run sequentially, the settings are applied, then power data is collected
         #Each listing needs a name and what to set the 3 "disable spectrometer" registers to
         self.tests = []
-        self.tests.append(POWER_TEST(name = "0x0", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        self.tests.append(POWER_TEST(name = "0x100", reg0_val = 0x100, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "0x200", reg0_val = 0x200, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "0x300", reg0_val = 0x300, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "0x400", reg0_val = 0x400, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "0x500", reg0_val = 0x500, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "0x600", reg0_val = 0x600, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "0x700", reg0_val = 0x700, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "Spectrometer only", reg0_val = 0x0, reg1_val = 0x0, reg2_val = 0x0, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "Final averager off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0x0))
-        # self.tests.append(POWER_TEST(name = "Notch correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFF))
-        # self.tests.append(POWER_TEST(name = "Main correlator off", reg1_val = 0x0, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        # self.tests.append(POWER_TEST(name = "Notch averager off", reg1_val = 0xFF0000, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        # self.tests.append(POWER_TEST(name = "Deinterlacer off",
-        #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12, reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        # self.tests.append(POWER_TEST(name = "FFT off",
-        #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34,
-        #                         reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-        # self.tests.append(POWER_TEST(name = "Weight Fold off",
-        #                         reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4,
-        #                         reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
-
-        self.tests.append(POWER_TEST(name = "All uC/DDR options applied + Spectrometer off",
-                                reg0_val = 0x0,
-                                reg1_val = 0xFF0000 + self.deinterlace_34 + self.deinterlace_12 + self.sfft_12 + self.sfft_34 + self.weight_fold1 + self.weight_fold2 + self.weight_fold3 + self.weight_fold4 + self.weight_streamer,
-                                reg2_val = 0xFFFF, reg3_val = 0xFFFFFFFF))
+        self.tests.append(POWER_TEST(name = "DDR on, ADC off, SPE off, uC off", uc_disable = 0x5, adc_disable = 0x3, spe_enable = 0x0))
+        self.tests.append(POWER_TEST(name = "DDR on, ADC on, SPE off, uC off", uc_disable = 0x5, adc_disable = 0x0, spe_enable = 0x0))
+        self.tests.append(POWER_TEST(name = "DDR on, ADC on, SPE on, uC off", uc_disable = 0x5, adc_disable = 0x0, spe_enable = 0x1))
+        self.tests.append(POWER_TEST(name = "DDR on, ADC on, SPE on, uC on", uc_disable = 0x0, adc_disable = 0x0, spe_enable = 0x1))
 
         #When power data is collected, it happens in this order
         #Each listing needs the value to set the multiplexer chain to to bring the reading to the HK ADC
@@ -340,10 +318,9 @@ class LuSEE_POWER:
     #Just writes the registers that enable/disable parts of the spectrometer and waits for power to settle
     def prepare_test(self, test):
         print(f"Preparing test {test.name}")
-        self.comm.connection.write_reg(self.ud_ddr_disable, test.reg0_val)
-        self.comm.connection.write_reg(self.SPE_notch_avg_disable, test.reg1_val)
-        self.comm.connection.write_reg(self.SPE_avg_disable, test.reg2_val)
-        self.comm.connection.write_reg(self.corr_disable, test.reg3_val)
+        self.comm.connection.write_reg(self.uc_disable, test.uc_disable)
+        self.comm.connection.write_reg(self.adc_disable, test.adc_disable)
+        self.comm.connection.write_reg(self.spe_enable, test.spe_enable)
         print(f"Waiting {self.delay} seconds for power to stabilize")
         time.sleep(self.delay)
         print(self.comm.connection.read_reg(0))
@@ -454,14 +431,6 @@ class LuSEE_POWER:
             print(f"Error, branch string is given as {branch} which does not exist in the table")
             return 0
         return cable_voltage
-
-    #The INA901 reads the voltage across a sense resistor to measure the current
-    #It has an internal gain of 20V/V, so first we get the actual voltage across the resistor
-    #Then we use the value of the resistor to get the actual current
-    def convert_current(self, branch, val1, val2):
-        adc0 = (val1/self.ina_gain) / (self.resistors[branch])
-        adc4 = (val2/self.ina_gain) / (self.resistors[branch])
-        return adc0, adc4
 
     def mux_test(self):
         self.hk.init_i2c_mux()
