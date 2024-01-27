@@ -423,9 +423,6 @@ class LuSEE_COMMS:
         #Put Python in control of readout
         self.connection.write_reg(self.client_control, 1)
 
-        self.stop_spectrometer()
-        self.start_spectrometer()
-
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
         self.connection.write_reg(self.scratchpad_2, 1)

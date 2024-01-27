@@ -189,6 +189,8 @@ class LuSEE_MEASURE:
                 data_good = True
             else:
                 errors += 1
+                self.comm.stop_spectrometer()
+                self.comm.start_spectrometer()
                 print(f"Length of 16 ch array is {len(x)}")
                 for i in range(16):
                     try:
