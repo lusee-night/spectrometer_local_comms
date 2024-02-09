@@ -443,7 +443,7 @@ class LuSEE_COMMS:
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
         #Stop sending spectrometer data to microcontroller
-        self.connection.write_reg(self.df_enable, 0)
+        #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
         for i in range(16):
             #Allows us to repeat, since we've gotten errors where a channel doesn't come on the first try

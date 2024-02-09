@@ -109,7 +109,7 @@ class LuSEE_MEASURE:
     def get_pfb_data_all_fpga(self):
         #0 is red pcb
         #1 is green pcb
-        self.comm.set_pcb(0)
+        self.comm.set_pcb(1)
 
         #Set analog multiplexer scheme
         self.set_analog_mux(0, 0, 4, 0)
@@ -124,7 +124,7 @@ class LuSEE_MEASURE:
         self.comm.set_main_average(10)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
-        #self.comm.spectrometer_test_mode(1)
+        self.comm.spectrometer_test_mode(1)
         self.comm.notch_filter_on()
         #self.comm.notch_filter_off()
 
@@ -156,7 +156,7 @@ class LuSEE_MEASURE:
     def get_pfb_data_sw(self):
         #0 is red pcb
         #1 is green pcb
-        self.comm.set_pcb(0)
+        self.comm.set_pcb(1)
 
         #Set analog multiplexer scheme
         self.set_analog_mux(0, 0, 4, 0)
@@ -171,12 +171,12 @@ class LuSEE_MEASURE:
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
         self.comm.spectrometer_test_mode(1)
-        self.comm.notch_filter_on()
-        #self.comm.notch_filter_off()
+        #self.comm.notch_filter_on()
+        self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
-        self.comm.set_all_index(0x10)
+        self.comm.set_all_index(0x1F)
 
         data_good = False
         errors = 0
@@ -357,8 +357,8 @@ if __name__ == "__main__":
 
     #measure.comm.stop_spectrometer()
     #input("ready?")
-    #d = measure.get_pfb_data()
-    #d = measure.get_pfb_data_all_fpga()
+    d = measure.get_pfb_data()
+    d = measure.get_pfb_data_all_fpga()
     #input("ready?")
     e = measure.get_pfb_data_sw()
 
