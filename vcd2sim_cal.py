@@ -160,8 +160,8 @@ class LuSEE_Calibration_Test:
                     index = num
                     break
                 prev_j = j
-            if (not index):
-                sys.exit(f"Scanned {i} until {prev_j}, but no time reached {self.start_time}")
+            if (index == None):
+                sys.exit(f"Scanned {i} until {prev_j}, but no time reached {self.start_time}. Index is {index}")
 
             #Now that we have the start time, build the array of relevant data
             output = []
@@ -239,9 +239,9 @@ class LuSEE_Calibration_Test:
     def __init__(self):
         print("Python --> Welcome to the LuSEE VCD Converter")
         self.pp = pprint.PrettyPrinter(indent=4)
-        self.start_time = 20644005000
-        self.end_time = 20966805000
-        self.time_tick = 10000
+        self.start_time = 2673450000
+        self.end_time = 2878250000
+        self.time_tick = 100000
 
 if __name__ == "__main__":
     #Start was 20644000 ns

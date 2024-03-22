@@ -84,16 +84,16 @@ class LuSEE_MEASURE:
 
         #Notch not working yet
         self.comm.set_notch_average(4)
-        #self.comm.notch_filter_on()
-        self.comm.notch_filter_off()
+        self.comm.notch_filter_on()
+        #self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
         #Select which FFT to read out
         self.comm.select_fft("A1")
         #Need to set these as well for each FFT you read out
-        self.comm.set_index_array("A1", 0x10, "main")
-        self.comm.set_index_array("A1", 0x10, "notch")
+        self.comm.set_index_array("A1", 0x18, "main")
+        self.comm.set_index_array("A1", 0x18, "notch")
 
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
@@ -104,7 +104,7 @@ class LuSEE_MEASURE:
         # for i in range(len(y)):
         #     print(f"{i}:{y[i]}")
 
-        self.plot_fft(x, "A1")
+        self.plot_fft(self.twos_comp(x, 32), "A1")
 
     def get_pfb_data_all_fpga(self):
         #0 is red pcb
@@ -124,7 +124,7 @@ class LuSEE_MEASURE:
         self.comm.set_main_average(10)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
-        self.comm.spectrometer_test_mode(1)
+        self.comm.spectrometer_test_mode(0)
         self.comm.notch_filter_on()
         #self.comm.notch_filter_off()
 
@@ -133,7 +133,7 @@ class LuSEE_MEASURE:
         #Select which FFT to read out
         self.comm.select_fft("A1")
         #Need to set index as well for each FFT you read out
-        self.comm.set_all_index(0x10)
+        self.comm.set_all_index(0x18)
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
@@ -170,7 +170,7 @@ class LuSEE_MEASURE:
         self.comm.set_main_average(12)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
-        self.comm.spectrometer_test_mode(1)
+        self.comm.spectrometer_test_mode(0)
         #self.comm.notch_filter_on()
         self.comm.notch_filter_off()
 
@@ -323,14 +323,14 @@ if __name__ == "__main__":
     x = measure.get_adc1_data()
     measure.plot(measure.twos_comp(x, 14))
 
-    x = measure.get_adc2_data()
-    measure.plot(measure.twos_comp(x, 14))
-
-    x = measure.get_adc3_data()
-    measure.plot(measure.twos_comp(x, 14))
-
-    x = measure.get_adc4_data()
-    measure.plot(measure.twos_comp(x, 14))
+    # x = measure.get_adc2_data()
+    # measure.plot(measure.twos_comp(x, 14))
+    #
+    # x = measure.get_adc3_data()
+    # measure.plot(measure.twos_comp(x, 14))
+    #
+    # x = measure.get_adc4_data()
+    # measure.plot(measure.twos_comp(x, 14))
     #
     # a,b = measure.get_adc2_header_data()
     # print(b)
