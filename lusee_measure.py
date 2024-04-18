@@ -7,10 +7,16 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.06
-        self.scratchpad_2 = 0x121
-
+        self.version = 1.07
         self.comm = LuSEE_COMMS()
+
+    def set_all_adc_ramp(self):
+        self.comm.write_adc(0, 0x42, 0x08) #Enable digital functions on ADC0
+        self.comm.write_adc(1, 0x42, 0x08) #Enable digital functions on ADC1
+        self.comm.write_adc(0, 0x25, 0x04) #Enable ramp for channel A on ADC0
+        self.comm.write_adc(1, 0x25, 0x04) #Enable ramp for channel A on ADC1
+        self.comm.write_adc(0, 0x2B, 0x04) #Enable ramp for channel B on ADC0
+        self.comm.write_adc(1, 0x2B, 0x04) #Enable ramp for channel B on ADC1
 
     def get_adc1_data(self):
         self.comm.readout_mode("fpga")
@@ -137,9 +143,9 @@ class LuSEE_MEASURE:
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
 
-        for i in range(16):
-            key = self.get_key(i)
-            self.comm.select_fft(key)
+        for i in ["FFT1", "FFT2", "FFT3", "FFT4"]:
+            #key = self.get_key(i)
+            self.comm.set_function(i)
             self.comm.load_fft_fifos()
             x = self.comm.get_pfb_data(header = False)
             y = [hex(i) for i in x]
@@ -147,7 +153,7 @@ class LuSEE_MEASURE:
             #     print(y)
             #     self.plot_fft(self.twos_comp(x, 32), f"{key}fpga")
             #self.check_test_vals(x, i)
-            self.plot_fft(self.twos_comp(x, 32), f"{key}_fpga")
+            self.plot_fft(self.twos_comp(x, 32), f"{i}_fpga")
         # print(self.comm.read_dcb_timestamp())
         # print(self.comm.read_sys_timestamp())
         # print(self.comm.read_df_timestamp())
@@ -176,7 +182,7 @@ class LuSEE_MEASURE:
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()
-        self.comm.set_all_index(0x1F)
+        self.comm.set_all_index(0x18)
 
         data_good = False
         errors = 0
@@ -222,7 +228,7 @@ class LuSEE_MEASURE:
         x = []
         for i in range(len(data)):
             x.append(i / 2048 * 100 / 2)
-        x.reverse()
+        #x.reverse()
         fig.suptitle(title, fontsize = 20)
         yaxis = "counts"
         ax.set_ylabel(yaxis, fontsize=14)
@@ -309,11 +315,7 @@ if __name__ == "__main__":
         measure.comm.reset_adc(adc = 0)
 
     if (arg == "adc"):
-        measure.comm.reset_adc(adc = 0)
-        measure.comm.write_adc(adc = 0, reg = 0x25, data = 0xF4)
-        measure.comm.read_adc(adc = 0, reg = 0x25)
-        print(hex(resp))
-        print(hex(resp >> 16))
+        measure.set_all_adc_ramp()
 
     measure.set_analog_mux(0, 0, 4, 0)
     measure.set_analog_mux(1, 1, 4, 0)
@@ -357,7 +359,7 @@ if __name__ == "__main__":
 
     #measure.comm.stop_spectrometer()
     #input("ready?")
-    d = measure.get_pfb_data()
+    #d = measure.get_pfb_data()
     d = measure.get_pfb_data_all_fpga()
     #input("ready?")
     e = measure.get_pfb_data_sw()

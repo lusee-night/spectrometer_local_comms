@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.04
+        self.version = 1.05
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -313,6 +313,39 @@ class LuSEE_ETHERNET:
         formatted_data2 = struct.unpack_from(">2048I",raw_data)
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict
+
+    def send_bootloader_message(self, message):
+        self.write_cdi_reg(self.write_register, message)
+        self.toggle_cdi_latch()
+
+    def receive_bootloader_message(self):
+        #Set up listening socket - IPv4, UDP
+        sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
+        sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock_readresp.bind((self.PC_IP, self.PORT_HSDATA))
+        sock_readresp.settimeout(self.udp_timeout)
+        try:
+            data = sock_readresp.recv(self.BUFFER_SIZE)
+        except socket.timeout:
+            print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
+            print ("Waited for CDI response on")
+            print (sock_readresp.getsockname())
+            sock_readresp.close()
+            return None
+
+        #print ("Waited for FEMB response on")
+        #print (sock_readresp.getsockname())
+        sock_readresp.close()
+
+        #Goes from binary data to hexidecimal (because we know this is host order bits)
+        dataHex = []
+        try:
+            dataHex = binascii.hexlify(data)
+            return dataHex
+        except TypeError:
+            print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
+
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
