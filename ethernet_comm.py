@@ -63,23 +63,33 @@ class LuSEE_ETHERNET:
         time.sleep(self.wait_time)
 
     def write_reg(self, reg, data):
-        regVal = int(reg)
-        dataVal = int(data)
-        #Splits the register up, since both halves need to go through socket.htons seperately
-        dataValMSB = ((dataVal >> 16) & 0xFFFF)
-        dataValLSB = dataVal & 0xFFFF
+        for i in range(10):
+            if (i > 0):
+                print(f"Python Ethernet --> Re-attempt {i}")
+            regVal = int(reg)
+            dataVal = int(data)
+            #Splits the register up, since both halves need to go through socket.htons seperately
+            dataValMSB = ((dataVal >> 16) & 0xFFFF)
+            dataValLSB = dataVal & 0xFFFF
 
-        dataMSB = self.first_data_pack + dataValMSB
-        self.write_cdi_reg(self.write_register, dataMSB)
-        self.toggle_cdi_latch()
+            dataMSB = self.first_data_pack + dataValMSB
+            self.write_cdi_reg(self.write_register, dataMSB)
+            self.toggle_cdi_latch()
 
-        dataLSB = self.second_data_pack + dataValLSB
-        self.write_cdi_reg(self.write_register, dataLSB)
-        self.toggle_cdi_latch()
+            dataLSB = self.second_data_pack + dataValLSB
+            self.write_cdi_reg(self.write_register, dataLSB)
+            self.toggle_cdi_latch()
 
-        address_value = self.address_write + reg
-        self.write_cdi_reg(self.write_register, address_value)
-        self.toggle_cdi_latch()
+            address_value = self.address_write + reg
+            self.write_cdi_reg(self.write_register, address_value)
+            self.toggle_cdi_latch()
+
+            time.sleep(self.wait_time)
+            readback = self.read_reg(reg)
+            if (readback == data):
+                break
+            else:
+                print(f"Python Ethernet --> Tried to write {hex(data)} to register {hex(reg)} but read back {hex(readback)}")
 
     def read_reg(self, reg):
         address_value = self.address_read + reg
