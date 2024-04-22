@@ -143,10 +143,11 @@ class LuSEE_BOOTLOADER:
         pages = array_length // 64 #Each page in Flash is 64 of these 32 bit chunks, for 256 bytes (2048 bits) total
         leftover = array_length % 64 #The last page may not be filled, so we need to know when to start padding 0s
 
-        print(array_length)
-        print(leftover)
-        print(pages)
-        print(hex(sum(write_array)))
+        program_size = len(write_array)
+        print(f"Program sum is {hex(sum(write_array))}")
+        program_checksum = self.convert_checksum(sum(write_array), 32)
+        print(f"Program size is {program_size} and checksum is {hex(program_checksum)}")
+        sys.exit()
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_enable_phrase + region)
         for i in range(pages):
             print(f"{self.name}Writing page {i}/{pages}")
@@ -161,10 +162,6 @@ class LuSEE_BOOTLOADER:
             print(f"{self.name}Page {i} checksum is {hex(self.convert_checksum(running_sum, 16))}")
             self.connection.write_reg(self.bootloader_flash_checksum_reg, self.convert_checksum(running_sum, 16))
             self.connection.write_reg(self.bootloader_flash_page_reg, i)
-            if (self.connection.read_reg(self.bootloader_flash_checksum_reg) != self.convert_checksum(running_sum, 16)):
-                print("error")
-            if (self.connection.read_reg(self.bootloader_flash_page_reg) != i):
-                print("error2")
             self.connection.send_bootloader_message(self.WRITE_TO_FLASH + (region << 8))
         if (leftover):
             print(f"{self.name}Writing page {pages}/{pages}")
@@ -178,6 +175,7 @@ class LuSEE_BOOTLOADER:
                 running_sum += (chunk & 0xFFFF0000) >> 16
 
                 self.connection.write_reg(self.bootloader_flash_start_reg + num, chunk)
+            print(f"{self.name}Page {pages} checksum is {hex(self.convert_checksum(running_sum, 16))}")
             self.connection.write_reg(self.bootloader_flash_checksum_reg, self.convert_checksum(running_sum, 16))
             self.connection.write_reg(self.bootloader_flash_page_reg, i)
             self.connection.send_bootloader_message(self.WRITE_TO_FLASH + (region << 8))
@@ -186,10 +184,6 @@ class LuSEE_BOOTLOADER:
         self.connection.write_reg(self.bootloader_flash_enable_reg, 0)
 
         self.connection.write_reg(self.bootloader_metadata_enable_reg, self.bootloader_flash_enable_phrase + region)
-
-        program_size = len(write_array)
-        program_checksum = self.convert_checksum(sum(write_array), 32)
-        print(f"Program size is {program_size} and checksum is {hex(program_checksum)}")
 
         self.connection.write_reg(self.bootloader_metadata_size_reg, program_size)
         self.connection.write_reg(self.bootloader_metadata_checksum_reg, program_checksum)
@@ -204,8 +198,8 @@ class LuSEE_BOOTLOADER:
 if __name__ == "__main__":
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
-    boot.init_bootloader()
-    time.sleep(0.1)
+    #boot.init_bootloader()
+    #time.sleep(0.1)
     #boot.remain()
     #boot.get_program_info()
     boot.file_path = sys.argv[1]

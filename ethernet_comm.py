@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.07
+        self.version = 1.08
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -65,38 +65,28 @@ class LuSEE_ETHERNET:
         time.sleep(self.wait_time)
 
     def write_reg(self, reg, data):
-        for i in range(10):
-            if (i > 0):
-                print(f"Python Ethernet --> Re-attempt {i}")
-            regVal = int(reg)
-            dataVal = int(data)
-            #Splits the register up, since both halves need to go through socket.htons seperately
-            dataValMSB = ((dataVal >> 16) & 0xFFFF)
-            dataValLSB = dataVal & 0xFFFF
+        regVal = int(reg)
+        dataVal = int(data)
+        #Splits the register up, since both halves need to go through socket.htons seperately
+        dataValMSB = ((dataVal >> 16) & 0xFFFF)
+        dataValLSB = dataVal & 0xFFFF
 
-            dataMSB = self.first_data_pack + dataValMSB
-            self.write_cdi_reg(self.write_register, dataMSB)
-            time.sleep(self.wait_time)
-            self.toggle_cdi_latch()
+        dataMSB = self.first_data_pack + dataValMSB
+        self.write_cdi_reg(self.write_register, dataMSB)
+        time.sleep(self.wait_time)
+        self.toggle_cdi_latch()
 
-            dataLSB = self.second_data_pack + dataValLSB
-            self.write_cdi_reg(self.write_register, dataLSB)
-            time.sleep(self.wait_time)
-            self.toggle_cdi_latch()
+        dataLSB = self.second_data_pack + dataValLSB
+        self.write_cdi_reg(self.write_register, dataLSB)
+        time.sleep(self.wait_time)
+        self.toggle_cdi_latch()
 
-            address_value = self.address_write + reg
-            self.write_cdi_reg(self.write_register, address_value)
-            time.sleep(self.wait_time)
-            self.toggle_cdi_latch()
+        address_value = self.address_write + reg
+        self.write_cdi_reg(self.write_register, address_value)
+        time.sleep(self.wait_time)
+        self.toggle_cdi_latch()
 
-            time.sleep(self.wait_time)
-            readback = self.read_reg(reg)
-            if (readback == data):
-                break
-            elif (reg in self.exception_registers):
-                break
-            else:
-                print(f"Python Ethernet --> Tried to write {hex(data)} to register {hex(reg)} but read back {hex(readback)}")
+        time.sleep(self.wait_time)
 
     def read_reg(self, reg):
         address_value = self.address_read + reg
