@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.06
+        self.version = 1.07
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -43,7 +43,7 @@ class LuSEE_ETHERNET:
 
         self.max_packet = 0x7FB
 
-        self.exception_registers = [0x240, 0x241]
+        self.exception_registers = [0x0, 0x240, 0x241]
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
@@ -76,14 +76,17 @@ class LuSEE_ETHERNET:
 
             dataMSB = self.first_data_pack + dataValMSB
             self.write_cdi_reg(self.write_register, dataMSB)
+            time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             dataLSB = self.second_data_pack + dataValLSB
             self.write_cdi_reg(self.write_register, dataLSB)
+            time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             address_value = self.address_write + reg
             self.write_cdi_reg(self.write_register, address_value)
+            time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             time.sleep(self.wait_time)
@@ -98,6 +101,7 @@ class LuSEE_ETHERNET:
     def read_reg(self, reg):
         address_value = self.address_read + reg
         self.write_cdi_reg(self.write_register, address_value)
+        time.sleep(self.wait_time)
         self.toggle_cdi_latch()
 
         resp = self.read_cdi_reg(self.readback_register)

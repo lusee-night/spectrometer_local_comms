@@ -33,9 +33,16 @@ class LuSEE_BOOTLOADER:
         self.last_hex_line = b':00000001FF\n'
         self.bootloader_flash_enable_reg = 0x630
         self.bootloader_flash_enable_phrase = 0xFEED0000
+        self.bootloader_flash_delete_phrase = 0xDEAD0000
+        self.bootloader_default_delete_phrase = 0xFACEFEED
+
         self.bootloader_flash_start_reg = 0x640
         self.bootloader_flash_checksum_reg = 0x621
         self.bootloader_flash_page_reg = 0x620
+
+        self.bootloader_metadata_enable_reg = 0x632
+        self.bootloader_metadata_size_reg = 0x630
+        self.bootloader_metadata_checksum_reg = 0x631
 
     def init_bootloader(self):
         #Send reset microcontroller packet
@@ -140,8 +147,6 @@ class LuSEE_BOOTLOADER:
         print(leftover)
         print(pages)
         print(hex(sum(write_array)))
-        total_checksum = self.convert_checksum(sum(write_array), 32)
-        print(hex(total_checksum))
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_enable_phrase + region)
         for i in range(pages):
             print(f"{self.name}Writing page {i}/{pages}")
@@ -180,6 +185,22 @@ class LuSEE_BOOTLOADER:
 
         self.connection.write_reg(self.bootloader_flash_enable_reg, 0)
 
+        self.connection.write_reg(self.bootloader_metadata_enable_reg, self.bootloader_flash_enable_phrase + region)
+
+        program_size = len(write_array)
+        program_checksum = self.convert_checksum(sum(write_array), 32)
+        print(f"Program size is {program_size} and checksum is {hex(program_checksum)}")
+
+        self.connection.write_reg(self.bootloader_metadata_size_reg, program_size)
+        self.connection.write_reg(self.bootloader_metadata_checksum_reg, program_checksum)
+        self.connection.send_bootloader_message(self.WRITE_METADATA + (region << 8))
+
+        self.connection.write_reg(self.bootloader_metadata_enable_reg, 0)
+
+    def delete_region(self, region):
+        self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_delete_phrase + region)
+        self.connection.send_bootloader_message(self.DELETE_FLASH_REGION + (region << 8))
+
 if __name__ == "__main__":
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
@@ -188,4 +209,5 @@ if __name__ == "__main__":
     #boot.remain()
     #boot.get_program_info()
     boot.file_path = sys.argv[1]
+    #boot.delete_region(region = 1)
     boot.write_hex_bootloader(region = 1)
