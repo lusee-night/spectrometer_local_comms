@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.05
+        self.version = 1.06
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -42,6 +42,8 @@ class LuSEE_ETHERNET:
         self.second_data_pack = 0xA10000
 
         self.max_packet = 0x7FB
+
+        self.exception_registers = [0x240, 0x241]
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
@@ -87,6 +89,8 @@ class LuSEE_ETHERNET:
             time.sleep(self.wait_time)
             readback = self.read_reg(reg)
             if (readback == data):
+                break
+            elif (reg in self.exception_registers):
                 break
             else:
                 print(f"Python Ethernet --> Tried to write {hex(data)} to register {hex(reg)} but read back {hex(readback)}")
