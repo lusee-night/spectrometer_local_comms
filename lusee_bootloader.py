@@ -1,7 +1,6 @@
 import time
 import os
 import sys
-import struct
 from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_BOOTLOADER:
@@ -13,12 +12,7 @@ class LuSEE_BOOTLOADER:
         self.UC_REG = 0x100
 
         self.REMAIN = 0xB00000
-        self.LOAD_REGION_1 = 0xB00001
-        self.LOAD_REGION_2 = 0xB00002
-        self.LOAD_REGION_3 = 0xB00003
-        self.LOAD_REGION_4 = 0xB00004
-        self.LOAD_REGION_5 = 0xB00005
-        self.LOAD_REGION_6 = 0xB00006
+        self.LOAD_REGION_BASE = 0xB00000
 
         self.LAUNCH_SW = 0xB00007
         self.GET_PROGRAM_INFO = 0xB00008
@@ -30,7 +24,7 @@ class LuSEE_BOOTLOADER:
         self.QUICK_DDR_TEST = 0xB0000E
         self.FULL_DDR_TEST = 0xB0000F
 
-        self.last_hex_line = b':00000001FF\n'
+        self.last_hex_line = b':00000001FF'
         self.bootloader_flash_enable_reg = 0x630
         self.bootloader_flash_enable_phrase = 0xFEED0000
         self.bootloader_flash_delete_phrase = 0xDEAD0000
@@ -46,10 +40,9 @@ class LuSEE_BOOTLOADER:
 
     def init_bootloader(self):
         #Send reset microcontroller packet
-        self.connection.write_reg(self.UC_REG, 1)
-        self.connection.write_reg(self.UC_REG, 0)
+        #self.connection.write_reg(self.UC_REG, 1)
+        #self.connection.write_reg(self.UC_REG, 0)
         #Check that bootloader init packet comes in
-        time.sleep(1)
         resp = self.connection.receive_bootloader_message()
         print(resp)
         #Send remain in bootloader message
@@ -58,10 +51,34 @@ class LuSEE_BOOTLOADER:
     def remain(self):
         self.connection.send_bootloader_message(self.REMAIN)
 
+    def load_region(self, region):
+        self.connection.send_bootloader_message(self.LOAD_REGION_BASE + region)
+
+    def launch_software(self):
+        self.connection.send_bootloader_message(self.LAUNCH_SW)
+
     def get_program_info(self):
         self.connection.send_bootloader_message(self.GET_PROGRAM_INFO)
         #resp = self.connection.receive_bootloader_message()
         #print(resp)
+
+    def read_loaded_program(self):
+        self.connection.send_bootloader_message(self.SEND_PROGRAM_TO_DCB)
+
+    def delete_spectrometer_defaults(self):
+        self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_default_delete_phrase)
+        self.connection.send_bootloader_message(self.DELETE_DEFAULTS)
+        self.connection.write_reg(self.bootloader_flash_enable_reg, 0)
+
+    def delete_region(self, region):
+        self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_delete_phrase + region)
+        self.connection.send_bootloader_message(self.DELETE_FLASH_REGION + (region << 8))
+
+    def ddr_quick_test(self):
+        self.connection.send_bootloader_message(self.QUICK_DDR_TEST)
+
+    def ddr_full_test(self):
+        self.connection.send_bootloader_message(self.FULL_DDR_TEST)
 
     #Converts from the raw checksum after counting values to the two's complement used in the Intel Hex File format and Jack's bootloader
     #Takes the number of bits to use to convert as well, because Python has to be a pain in the ass about inverting bytes
@@ -92,23 +109,25 @@ class LuSEE_BOOTLOADER:
         bytes_length = int(line_length/2)
 
         #This starts after the colon and takes two consecutive nibbles at a time and converts them to their integer values, and stops before the line checksum
-        val = [int(line[1+(j*2):1+(j*2)+2], 16) for j in range(bytes_length)]
+        val = [int(line[1+(j*2):1+(j*2)+2], 16) for j in range(bytes_length+1)]
+        #v2 = [hex(i) for i in val]
+        #print(v2)
         running_sum = sum(val)
 
         calculated_checksum = self.convert_checksum(running_sum, 8)
 
         #Last 2 characters are the 8 bit checksum, interpreted as hex
-        line_checksum = int(line[-3:], 16)
+        line_checksum = int(line[-2:], 16)
 
         if (calculated_checksum != line_checksum):
-            sys.exit(f"Line {num} of file {self.file_path} has a calculated checksum of {hex(calculated_checksum)} and a checksum at the end of the line of {line_checksum}. The total line is {line}")
+            sys.exit(f"Line {num} of file {self.file_path} has a calculated checksum of {hex(calculated_checksum)} and a checksum at the end of the line of {hex(line_checksum)}. The total line is {line}")
 
     #Open a file in Intel Hex Format and create the array to write to FPGA: https://en.wikipedia.org/wiki/Intel_HEX
     def open_file(self):
         if (not os.path.isfile(self.file_path)):
             sys.exit(f"The given path {self.file_path} is not a valid file. Point to a microcontroller hex file")
         f = open(self.file_path, mode="rb")
-        lines = f.readlines()
+        lines = f.read().splitlines()
 
         #We will end up with an array of 32 bit integers, because that's how all this data is written to the FPGA registers
         write_array = []
@@ -145,9 +164,16 @@ class LuSEE_BOOTLOADER:
 
         program_size = len(write_array)
         print(f"Program sum is {hex(sum(write_array))}")
+        print(f"Page 1 sum is {hex(sum(write_array[0:128]))}")
+        rolling_sum = 0
+        for i,w in enumerate(write_array):
+            rolling_sum += w
+
+            print(f"Page {i//64}, word {i%64} is {hex(w)} and the checksum is {hex(rolling_sum & 0xFFFFFFFF)}")
+
         program_checksum = self.convert_checksum(sum(write_array), 32)
-        print(f"Program size is {program_size} and checksum is {hex(program_checksum)}")
-        sys.exit()
+        print(f"Program size is {program_size} and checksum is {hex(program_checksum & 0xFFFFFFFF)}")
+        #sys.exit()
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_enable_phrase + region)
         for i in range(pages):
             print(f"{self.name}Writing page {i}/{pages}")
@@ -168,7 +194,7 @@ class LuSEE_BOOTLOADER:
             final_page = write_array[pages*64:]
             filled_zeros = [0] * (64-leftover)
             final_page.extend(filled_zeros)
-
+            fp = [hex(k) for k in final_page]
             running_sum = 0
             for num,chunk in enumerate(final_page):
                 running_sum += chunk & 0xFFFF
@@ -177,31 +203,25 @@ class LuSEE_BOOTLOADER:
                 self.connection.write_reg(self.bootloader_flash_start_reg + num, chunk)
             print(f"{self.name}Page {pages} checksum is {hex(self.convert_checksum(running_sum, 16))}")
             self.connection.write_reg(self.bootloader_flash_checksum_reg, self.convert_checksum(running_sum, 16))
-            self.connection.write_reg(self.bootloader_flash_page_reg, i)
+            self.connection.write_reg(self.bootloader_flash_page_reg, pages)
             self.connection.send_bootloader_message(self.WRITE_TO_FLASH + (region << 8))
-            time.sleep(1)
 
         self.connection.write_reg(self.bootloader_flash_enable_reg, 0)
 
         self.connection.write_reg(self.bootloader_metadata_enable_reg, self.bootloader_flash_enable_phrase + region)
-
         self.connection.write_reg(self.bootloader_metadata_size_reg, program_size)
         self.connection.write_reg(self.bootloader_metadata_checksum_reg, program_checksum)
         self.connection.send_bootloader_message(self.WRITE_METADATA + (region << 8))
 
         self.connection.write_reg(self.bootloader_metadata_enable_reg, 0)
 
-    def delete_region(self, region):
-        self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_delete_phrase + region)
-        self.connection.send_bootloader_message(self.DELETE_FLASH_REGION + (region << 8))
-
 if __name__ == "__main__":
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
-    #boot.init_bootloader()
+    boot.init_bootloader()
     #time.sleep(0.1)
     #boot.remain()
     #boot.get_program_info()
-    boot.file_path = sys.argv[1]
+    #boot.file_path = sys.argv[1]
     #boot.delete_region(region = 1)
-    boot.write_hex_bootloader(region = 1)
+    #boot.write_hex_bootloader(region = 1)

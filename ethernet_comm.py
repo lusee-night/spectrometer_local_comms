@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.08
+        self.version = 1.09
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -17,6 +17,7 @@ class LuSEE_ETHERNET:
         self.FEMB_PORT_RREG = 32001
         self.FEMB_PORT_RREGRESP = 32002
         self.PORT_HSDATA = 32003
+        self.PORT_HK = 32003
         self.BUFFER_SIZE = 9014
 
         self.KEY1 = 0xDEAD
@@ -232,15 +233,15 @@ class LuSEE_ETHERNET:
         #print (sock_data.getsockname())
         sock_data.close()
         if (data_type == "adc"):
-            formatted_data, header_dict = self.check_data_adc(incoming_packets, data_type)
+            formatted_data, header_dict = self.check_data_adc(incoming_packets)
         else:
-            formatted_data, header_dict = self.check_data_pfb(incoming_packets, data_type)
+            formatted_data, header_dict = self.check_data_pfb(incoming_packets)
         if (header):
             return formatted_data, header_dict
         else:
             return formatted_data
 
-    def check_data_adc(self, data, data_type):
+    def check_data_adc(self, data):
         udp_packet_count = 0
         cdi_packet_count = 0
         data_packet = []
@@ -278,7 +279,7 @@ class LuSEE_ETHERNET:
 
         return data_packet, header_dict
 
-    def check_data_pfb(self, data, data_type):
+    def check_data_pfb(self, data):
         udp_packet_count = 0
         cdi_packet_count = 0
         header_dict = {}
@@ -331,8 +332,11 @@ class LuSEE_ETHERNET:
         sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
         sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock_readresp.bind((self.PC_IP, self.PORT_HSDATA))
+        sock_readresp.bind((self.PC_IP, self.PORT_HK))
         sock_readresp.settimeout(self.udp_timeout)
+        #self.write_reg(0x100, 1)
+        #self.write_reg(0x100, 0)
+        self.send_bootloader_message(0xB00008)
         try:
             data = sock_readresp.recv(self.BUFFER_SIZE)
         except socket.timeout:
@@ -345,14 +349,44 @@ class LuSEE_ETHERNET:
         #print ("Waited for FEMB response on")
         #print (sock_readresp.getsockname())
         sock_readresp.close()
-
-        #Goes from binary data to hexidecimal (because we know this is host order bits)
-        dataHex = []
+        unpacked = self.check_data_bootloader(data)
         try:
-            dataHex = binascii.hexlify(data)
+            unpacked = self.check_data_bootloader(data)
             return dataHex
         except TypeError:
             print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
+
+    def check_data_bootloader(self, data):
+        print(f"Data is {data}")
+        data_packet = []
+        header_dict = {}
+
+        unpack_buffer = int((len(data))/2)
+        #Unpacking into shorts in increments of 2 bytes
+        formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
+        print(formatted_data)
+        #print(formatted_data)
+        udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
+        header_dict["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
+        header_dict["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
+        header_dict["message_id"] = (formatted_data[8] >> 10)
+
+
+        header_dict["message_spare"] = formatted_data[9]
+        header_dict["ccsds_version"] = formatted_data[10] >> 13
+        header_dict["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
+        header_dict["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
+        header_dict["ccsds_appid"] = formatted_data[10] & 0x7F
+        header_dict["ccsds_groupflags"] = formatted_data[11] >> 14
+        header_dict["ccsds_sequence_cnt"] = formatted_data[11] & 0x3FFF
+
+        #ADC data is simple, it's the 16 bit shorts that were already unpacked
+        added_packet_size = len(formatted_data[13:])
+        data_packet.extend(formatted_data[13:])
+
+        print(data_packet)
+        print(header_dict)
+        return data_packet, header_dict
 
 
 if __name__ == "__main__":
