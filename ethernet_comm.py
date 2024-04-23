@@ -44,7 +44,13 @@ class LuSEE_ETHERNET:
 
         self.max_packet = 0x7FB
 
-        self.exception_registers = [0x0, 0x240, 0x241]
+        self.RESET_UC = 0xBFFFFF
+        self.SEND_PROGRAM_TO_DCB = 0xB00009
+        self.UC_REG = 0x100
+        self.BL_RESET = 0x0
+        self.BL_JUMP = 0x1
+        self.BL_PROGRAM_CHECK = 0x2
+        self.BL_PROGRAM_VERIFY = 0x3
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
@@ -147,7 +153,7 @@ class LuSEE_ETHERNET:
             #try to receive response packet from board, store in hex
             data = []
             try:
-                    data = sock_readresp.recv(self.BUFFER_SIZE)
+                data = sock_readresp.recv(self.BUFFER_SIZE)
             except socket.timeout:
                 if (i > 9):
                     print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
@@ -241,6 +247,25 @@ class LuSEE_ETHERNET:
         else:
             return formatted_data
 
+    #Unpack the header files into a dictionary, this is common for all CDI responses
+    def organize_header(self, formatted_data):
+        header_dict = {}
+
+        header_dict["udp_packet_num"] = hex((formatted_data[0] << 16) + formatted_data[1])
+        header_dict["header_user_info"] = hex((formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5])
+        header_dict["system_status"] = hex((formatted_data[6] << 16) + formatted_data[7])
+        header_dict["message_id"] = hex(formatted_data[8] >> 10)
+
+        header_dict["message_spare"] = hex(formatted_data[9])
+        header_dict["ccsds_version"] = hex(formatted_data[10] >> 13)
+        header_dict["ccsds_packet_type"] = hex((formatted_data[10] >> 12) & 0x1)
+        header_dict["ccsds_secheaderflag"] = hex((formatted_data[10] >> 11) & 0x1)
+        header_dict["ccsds_appid"] = hex(formatted_data[10] & 0x7FF)
+        header_dict["ccsds_groupflags"] = hex(formatted_data[11] >> 14)
+        header_dict["ccsds_sequence_cnt"] = hex(formatted_data[11] & 0x3FFF)
+
+        return header_dict
+
     def check_data_adc(self, data):
         udp_packet_count = 0
         cdi_packet_count = 0
@@ -257,24 +282,8 @@ class LuSEE_ETHERNET:
             unpack_buffer = int((len(i))/2)
             #Unpacking into shorts in increments of 2 bytes
             formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
-
-            #print(formatted_data)
-            udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
-            header_dict[num]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
-            header_dict[num]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
-            header_dict[num]["message_id"] = (formatted_data[8] >> 10)
-
-
-            header_dict[num]["message_spare"] = formatted_data[9]
-            header_dict[num]["ccsds_version"] = formatted_data[10] >> 13
-            header_dict[num]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
-            header_dict[num]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
-            header_dict[num]["ccsds_appid"] = formatted_data[10] & 0x7F
-            header_dict[num]["ccsds_groupflags"] = formatted_data[11] >> 14
-            ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
-
+            header_dict[num] = self.organize_header(formatted_data)
             #ADC data is simple, it's the 16 bit shorts that were already unpacked
-            added_packet_size = len(formatted_data[13:])
             data_packet.extend(formatted_data[13:])
 
         return data_packet, header_dict
@@ -293,101 +302,162 @@ class LuSEE_ETHERNET:
         for num,i in enumerate(data):
             header_dict[num] = {}
             #print(f"Length is {len(i)}")
-            unpack_buffer = int((len(i))/4)
+            unpack_buffer = int((len(i))/2)
             #Unpacking into shorts in increments of 2 bytes just for the header
-            formatted_data = struct.unpack_from(f">{unpack_buffer*2}H",i)
-
-            #If this is PFB data, then this packet either ends with the first 16 bits of the next sample
-            #Or the last 16 bits of the previous sample. Taking these 16 bit shorts help piece it back together later
-            first_val = formatted_data[13]
-            last_val = formatted_data[(unpack_buffer * 2) - 1]
-
-            #print(formatted_data)
-            udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
-            header_dict[num]["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
-            header_dict[num]["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
-            header_dict[num]["message_id"] = (formatted_data[8] >> 10)
-
-
-            header_dict[num]["message_spare"] = formatted_data[9]
-            header_dict[num]["ccsds_version"] = formatted_data[10] >> 13
-            header_dict[num]["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
-            header_dict[num]["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
-            header_dict[num]["ccsds_appid"] = formatted_data[10] & 0x7F
-            print(f"APID is {hex(formatted_data[10] & 0x7F)}")
-            header_dict[num]["ccsds_groupflags"] = formatted_data[11] >> 14
-            ccsds_sequence_cnt = formatted_data[11] & 0x3FFF
+            formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
+            header_dict[num] = self.organize_header(formatted_data)
+            #Payload starts at nibble 26
             raw_data.extend(i[26:])
 
+        #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
         formatted_data2 = struct.unpack_from(">2048I",raw_data)
+        #But each 2 byte section of the 4 byte value is reversed
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict
 
+    #Writes a bootloader command without waiting for a result
     def send_bootloader_message(self, message):
         self.write_cdi_reg(self.write_register, message)
         self.toggle_cdi_latch()
 
-    def receive_bootloader_message(self):
+    #Sets up a socket and then writes a bootloader command to listen to a result
+    #If we open the socket after writing the command, we'll miss the response
+    def send_bootloader_message_response(self, message):
         #Set up listening socket - IPv4, UDP
         sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
         sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock_readresp.bind((self.PC_IP, self.PORT_HK))
         sock_readresp.settimeout(self.udp_timeout)
-        #self.write_reg(0x100, 1)
-        #self.write_reg(0x100, 0)
-        self.send_bootloader_message(0xB00008)
-        try:
-            data = sock_readresp.recv(self.BUFFER_SIZE)
-        except socket.timeout:
-            print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
-            print ("Waited for CDI response on")
-            print (sock_readresp.getsockname())
-            sock_readresp.close()
-            return None
 
-        #print ("Waited for FEMB response on")
-        #print (sock_readresp.getsockname())
+        #The command to reset the microcontroller and check for the packet that it sends out
+        #is not actually a bootloader command, so it has to be done like this
+        if (message == self.RESET_UC):
+            self.write_reg(self.UC_REG, 1)
+            self.write_reg(self.UC_REG, 0)
+        else:
+            self.send_bootloader_message(message)
+
+        #Bootloader command responses are always one packet, unless we requested a readback
+        #of a hex data region
+        if (message == self.SEND_PROGRAM_TO_DCB):
+            keep_listening = True
+            data = []
+        else:
+            keep_listening = False
+
+        while(True):
+            try:
+                if (keep_listening):
+                    data.append(sock_readresp.recv(self.BUFFER_SIZE))
+                else:
+                    data = sock_readresp.recv(self.BUFFER_SIZE)
+                    break
+            except socket.timeout:
+                sock_readresp.close()
+                if (not keep_listening):
+                    print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
+                    print ("Waited for CDI response on")
+                    print (sock_readresp.getsockname())
+                    return None
+                else:
+                    print("Packets stopped coming")
+                    break
         sock_readresp.close()
-        unpacked = self.check_data_bootloader(data)
-        try:
-            unpacked = self.check_data_bootloader(data)
-            return dataHex
-        except TypeError:
-            print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
 
+        if (keep_listening):
+            self.unpack_hex_readback(data)
+        else:
+            try:
+                unpacked = self.check_data_bootloader(data)
+                return unpacked
+            except TypeError as e:
+                print(e)
+                print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
+
+    #Not implemented/finished yet because this function is still under construction in the bootloader
+    def unpack_hex_readback(self, data):
+        data_packet = bytearray()
+        header_dict = {}
+        num = 0
+        for i in data:
+            print(num)
+            num += 1
+            unpack_buffer = int((len(i))/2)
+            #Unpacking into shorts in increments of 2 bytes
+            formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
+            header_dict[num] = self.organize_header(formatted_data)
+
+            #The header is 13 bytes (26 hex byte characters) and the payload starts after as 32 bit ints
+            data_packet.extend(i[26:])
+
+        data_size = int(len(data_packet)/4)
+        formatted_data2 = struct.unpack_from(f">{data_size}I",data_packet)
+        #But the payload is reversed 2 bytes by 2 bytes
+        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+        fm3 = [hex(i) for i in formatted_data3]
+        print(fm3)
+        #With the formatted payload, get all relevant info
+        bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
+
+    #The bootloader response has the standard CDI header, so that's formatted
+    #And the payload is sent for further processing
     def check_data_bootloader(self, data):
-        print(f"Data is {data}")
-        data_packet = []
+        data_packet = bytearray()
         header_dict = {}
 
         unpack_buffer = int((len(data))/2)
         #Unpacking into shorts in increments of 2 bytes
         formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
-        print(formatted_data)
-        #print(formatted_data)
-        udp_packet_num = (formatted_data[0] << 16) + formatted_data[1]
-        header_dict["header_user_info"] = (formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5]
-        header_dict["system_status"] = (formatted_data[6] << 16) + formatted_data[7]
-        header_dict["message_id"] = (formatted_data[8] >> 10)
+        header_dict = self.organize_header(formatted_data)
 
+        #The header is 13 bytes (26 hex byte characters) and the payload starts after as 32 bit ints
+        data_packet.extend(data[26:])
+        data_size = int(len(data_packet)/4)
+        formatted_data2 = struct.unpack_from(f">{data_size}I",data_packet)
+        #But for every 4 byte value in the payload, the first and last 2 bytes are reversed
+        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
 
-        header_dict["message_spare"] = formatted_data[9]
-        header_dict["ccsds_version"] = formatted_data[10] >> 13
-        header_dict["ccsds_packet_type"] = (formatted_data[10] >> 12) & 0x1
-        header_dict["ccsds_secheaderflag"] = (formatted_data[10] >> 11) & 0x1
-        header_dict["ccsds_appid"] = formatted_data[10] & 0x7F
-        header_dict["ccsds_groupflags"] = formatted_data[11] >> 14
-        header_dict["ccsds_sequence_cnt"] = formatted_data[11] & 0x3FFF
+        #With the formatted payload, get all relevant header info
+        bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
 
-        #ADC data is simple, it's the 16 bit shorts that were already unpacked
-        added_packet_size = len(formatted_data[13:])
-        data_packet.extend(formatted_data[13:])
+        return bootloader_resp, header_dict
 
-        print(data_packet)
-        print(header_dict)
-        return data_packet, header_dict
+    #This looks at the common elements of each bootloader response header
+    #Depending on the type of packet response, it knows how to process it further
+    def unpack_bootloader_packet(self, packet):
+        bootloader_dict = {}
+        bootloader_dict['BL_Message'] = hex(packet[0])
+        bootloader_dict['BL_count'] = hex(packet[1])
+        bootloader_dict['BL_timestamp'] = hex((packet[3] << 32) + packet[2])
+        bootloader_dict['BL_end'] = hex(packet[7])
 
+        if (packet[0] == 1):
+            resp = self.unpack_program_jump(packet[8:])
+            bootloader_dict.update(resp)
+        elif (packet[0] == 2):
+            resp = self.unpack_program_info(packet[8:])
+            bootloader_dict.update(resp)
+
+        return bootloader_dict
+
+    #This is the format for the response packet when the client requested program info
+    def unpack_program_info(self, packet):
+        program_info_dict = {}
+        for i in range(0,6):
+            program_info_dict[f"Program{i+1}_metadata_size"] = hex(packet[i*3])
+            program_info_dict[f"Program{i+1}_metadata_checksum"] = hex(packet[(i*3)+1])
+            program_info_dict[f"Program{i+1}_calculated_checksum"] = hex(packet[(i*3)+2])
+        program_info_dict["Loaded_program_size"] = hex(packet[18])
+        program_info_dict["Loaded_program_checksum"] = hex(packet[19])
+        return program_info_dict
+
+    #This is the format for the response packet when the client requested to jump into the loaded program
+    def unpack_program_jump(self, packet):
+        program_info_dict = {}
+        program_info_dict["region_jumped_to"] = hex(packet[0])
+        program_info_dict["default_vals_loaded"] = packet[1]
+        return program_info_dict
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
