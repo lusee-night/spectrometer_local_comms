@@ -190,7 +190,9 @@ class LuSEE_COMMS:
     def reset_all_fifos(self):
         print("Python Debugging --> Resetting FIFO")
         self.connection.write_reg(self.fifo_rst, 1)
+        time.sleep(self.wait_time)
         self.connection.write_reg(self.fifo_rst, 0)
+        time.sleep(self.wait_time)
         print("Python Debugging --> FIFO reset complete")
 
     def load_adc_fifos(self):
@@ -198,7 +200,9 @@ class LuSEE_COMMS:
         new_val = old_val | 0x2
         print(f"Python Debugging --> While loading ADC FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
         self.connection.write_reg(self.load_data, new_val)
+        time.sleep(self.wait_time)
         self.connection.write_reg(self.load_data, old_val)
+        time.sleep(self.wait_time)
         print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
 
     def load_fft_fifos(self):
@@ -206,7 +210,9 @@ class LuSEE_COMMS:
         new_val = old_val | 0x4
         print(f"Python Debugging --> While loading FFT FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
         self.connection.write_reg(self.load_data, new_val)
+        time.sleep(self.wait_time)
         self.connection.write_reg(self.load_data, old_val)
+        time.sleep(self.wait_time)
         print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
 
     def get_df_drop_err(self):
