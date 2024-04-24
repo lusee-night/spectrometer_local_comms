@@ -3,7 +3,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.06
+        self.version = 1.07
 
         self.connection = LuSEE_ETHERNET()
 
@@ -109,7 +109,7 @@ class LuSEE_COMMS:
 
     def uC_reset(self, reset, ddr3_reset, clk_disable):
         reg_val = ((reset & 0x1) << 2) + ((ddr3_reset & 0x1) << 1) + (clk_disable & 0x1)
-        self.connection.write_reg(self.pcb_fix, reg_val)
+        self.connection.write_reg(self.uC_reset, reg_val)
 
     def reset_adc_readout(self, adc):
         self.connection.write_reg(self.adc_readout_reset, 1)
@@ -188,20 +188,26 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.num_samples, int(num))
 
     def reset_all_fifos(self):
+        print("Python Debugging --> Resetting FIFO")
         self.connection.write_reg(self.fifo_rst, 1)
         self.connection.write_reg(self.fifo_rst, 0)
+        print("Python Debugging --> FIFO reset complete")
 
     def load_adc_fifos(self):
         old_val = self.connection.read_reg(self.load_data)
         new_val = old_val | 0x2
+        print(f"Python Debugging --> While loading ADC FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
         self.connection.write_reg(self.load_data, new_val)
         self.connection.write_reg(self.load_data, old_val)
+        print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
 
     def load_fft_fifos(self):
         old_val = self.connection.read_reg(self.load_data)
         new_val = old_val | 0x4
+        print(f"Python Debugging --> While loading FFT FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
         self.connection.write_reg(self.load_data, new_val)
         self.connection.write_reg(self.load_data, old_val)
+        print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
 
     def get_df_drop_err(self):
         return self.connection.read_reg(self.df_drop_err)
@@ -450,7 +456,7 @@ class LuSEE_COMMS:
             received = False
             errors = 0
             while (not received):
-                apid = 0x10 + i
+                apid = 0x210 + i
                 wait_i = 0
                 #Wait for microcontroller to say that data has been returned back to CDI buffer
                 while(self.connection.read_reg(self.client_ack) == 0x0):
@@ -474,7 +480,7 @@ class LuSEE_COMMS:
                     for pkt in range(3):
                         if pkt in header:
                             if 'ccsds_appid' in header[pkt]:
-                                if (header[pkt]['ccsds_appid'] == apid):
+                                if (int(header[pkt]['ccsds_appid'], 16) == apid):
                                     #This is the successful case where everything matches
                                     self.connection.write_reg(self.scratchpad_1, (apid & 0xF))
                                     #print(f"Wrote {apid & 0xF} to scratchpad")
@@ -483,7 +489,7 @@ class LuSEE_COMMS:
                                     self.connection.write_reg(self.scratchpad_1, 0x20 + (apid & 0xF))
                                     received = False
                                     errors += 1
-                                    print(f"Expected APID was {apid} and received APID was {header[pkt]['ccsds_appid']}")
+                                    print(f"Expected APID was {apid} and received APID was {int(header[pkt]['ccsds_appid'], 16)}")
                                     print(f"Retrying channel {i}")
                                     break
                             else:

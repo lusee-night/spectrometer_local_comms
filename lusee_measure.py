@@ -364,4 +364,6 @@ if __name__ == "__main__":
     #input("ready?")
     e = measure.get_pfb_data_sw()
 
+    x = measure.get_adc1_data()
+    measure.plot(measure.twos_comp(x, 14))
     #You can save/plot the output data however you wish!

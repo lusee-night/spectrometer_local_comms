@@ -196,7 +196,6 @@ class LuSEE_BOOTLOADER:
         print(f"Program size is {hex(program_size)} and program checksum is {hex(program_checksum)}")
 
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_enable_phrase + region)
-        print(hex(self.connection.read_reg(self.bootloader_flash_enable_reg)))
         #Run through all full pages
         for i in range(pages):
             print(f"{self.name}Writing page {i}/{pages}")
@@ -246,8 +245,10 @@ if __name__ == "__main__":
     boot.get_program_info()
     #boot.read_loaded_program()
     #boot.ddr_quick_test()
-    boot.launch_software()
+
     boot.file_path = sys.argv[1]
-    #boot.delete_region(region = 1)
-    #time.sleep(3) #Have to add this because Jack gives us no feedback as to when the delete is finished
-    #boot.write_hex_bootloader(region = 1)
+    boot.delete_region(region = 1)
+    time.sleep(3) #Have to add this because Jack gives us no feedback as to when the delete is finished
+    boot.write_hex_bootloader(region = 1)
+
+    boot.launch_software()
