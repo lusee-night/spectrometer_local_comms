@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.10
+        self.version = 1.11
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -43,7 +43,7 @@ class LuSEE_ETHERNET:
         self.second_data_pack = 0xA10000
 
         self.max_packet = 0x7FB
-        self.exception_registers = [0x0, 0x200, 0x240, 0x241, 0x300, 0x400, 0x500, 0x600, 0x700, 0x703]
+        self.exception_registers = [0x0, 0x200, 0x240, 0x241, 0x300, 0x303, 0x400, 0x500, 0x600, 0x700, 0x703]
 
         self.RESET_UC = 0xBFFFFF
         self.SEND_PROGRAM_TO_DCB = 0xB00009

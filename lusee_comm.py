@@ -1,9 +1,10 @@
 import time
+from datetime import datetime
 from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.07
+        self.version = 1.08
 
         self.connection = LuSEE_ETHERNET()
 
@@ -12,6 +13,11 @@ class LuSEE_COMMS:
         self.dcb_ts_2 = 0x021
         self.sys_ts_1 = 0x022
         self.sys_ts_2 = 0x023
+
+        self.FW_Version = 0x0FC
+        self.FW_ID = 0x0FD
+        self.FW_Date = 0xFE
+        self.FW_Time = 0xFF
 
         self.uC_reset = 0x100
         self.scratchpad_1 = 0x120
@@ -137,6 +143,30 @@ class LuSEE_COMMS:
         lower = self.connection.read_reg(self.df_timestamp1)
         upper = self.connection.read_reg(self.df_timestamp2)
         return (upper << 32) + lower
+
+    def get_firmware_version(self):
+        firmware_dict = {}
+        firmware_dict['version'] = hex(self.connection.read_reg(self.FW_Version))
+        firmware_dict['id'] = hex(self.connection.read_reg(self.FW_ID))
+        firmware_dict['date'] = hex(self.connection.read_reg(self.FW_Date))
+        firmware_dict['time'] = hex(self.connection.read_reg(self.FW_Time))
+
+        date_string = firmware_dict['date'][2:]
+        time_string = firmware_dict['time'][2:]
+
+        year = int(date_string[:4])
+        month = int(date_string[4:6])
+        day = int(date_string[6:])
+        hour = int(time_string[:2])
+        minute = int(time_string[2:4])
+        second = int(time_string[4:6])
+
+        datetime_object = datetime(year = year, month = month, day = day, hour = hour, minute = minute, second = second)
+        firmware_dict['datetime'] = datetime_object
+
+        formatted_data = datetime_object.strftime("%B %d, %Y %I:%M:%S %p")
+        firmware_dict['formatted_datetime'] = formatted_data
+        return firmware_dict
 
     def write_adc(self, adc, reg, data):
         #print(f"Reg is {reg} and data is {hex(data)}")

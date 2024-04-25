@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.07
+        self.version = 1.08
         self.comm = LuSEE_COMMS()
 
     def set_all_adc_ramp(self):
@@ -322,6 +322,9 @@ if __name__ == "__main__":
     measure.set_analog_mux(2, 2, 4, 0)
     measure.set_analog_mux(3, 3, 4, 0)
 
+    print(f"Firmware version is {measure.comm.get_firmware_version()}")
+    #print(measure.comm.read_dcb_timestamp())
+    #print(measure.comm.read_sys_timestamp())
     x = measure.get_adc1_data()
     measure.plot(measure.twos_comp(x, 14))
 
