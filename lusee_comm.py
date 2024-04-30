@@ -65,6 +65,32 @@ class LuSEE_COMMS:
         self.mux2_reg = 0x502
         self.mux3_reg = 0x503
 
+        self.calibrator_reset = 0x800
+        self.calibrator_bit = 0
+        self.calibrator_formatter_bit = 1
+        self.Nac1 = 0x801
+        self.Nac2 = 0x802
+        self.notch_index = 0x803
+        self.cplx_index = 0x804
+        self.sum1_index = 0x805
+        self.sum2_index = 0x806
+        self.powertop_index = 0x807
+        self.powerbot_index = 0x808
+        self.driftFD_index = 0x809
+        self.driftSD1_index = 0x80A
+        self.driftSD2_index = 0x80B
+        self.default_drift = 0x80C
+        self.have_lock_value = 0x80D
+        self.have_lock_radian = 0x80E
+        self.lower_guard_value = 0x80F
+        self.upper_guard_value = 0x810
+        self.power_ratio = 0x811
+        self.antenna_enable = 0x812
+        self.cal_error_stick = 0x813
+        self.CF_Enable = 0x814
+        self.CF_TST_Mode_En = 0x815
+        self.CF_start_ADDR = 0x816
+
         self.readout_modes = {
             "FFT1": 0,
             "ADC1": 1,
@@ -570,6 +596,34 @@ class LuSEE_COMMS:
         elif (ch == 3):
             self.connection.write_reg(self.mux3_reg, mux_byte)
         return mux_byte
+
+    def reset_calibrator(self):
+        self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_bit)
+
+    def reset_calibrator_formatter(self):
+        self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_formatter_bit)
+
+    def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,
+                         driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable):
+
+        self.connection.write_reg(self.Nac1, Nac1)
+        self.connection.write_reg(self.Nac2, Nac2)
+        self.connection.write_reg(self.notch_index, notch_index)
+        self.connection.write_reg(self.cplx_index, cplx_index)
+        self.connection.write_reg(self.sum1_index, sum1_index)
+        self.connection.write_reg(self.sum2_index, sum2_index)
+        self.connection.write_reg(self.powertop_index, powertop_index)
+        self.connection.write_reg(self.powerbot_index, powerbot_index)
+        self.connection.write_reg(self.driftFD_index, driftFD_index)
+        self.connection.write_reg(self.driftSD1_index, driftSD1_index)
+        self.connection.write_reg(self.driftSD2_index, driftSD2_index)
+        self.connection.write_reg(self.default_drift, default_drift)
+        self.connection.write_reg(self.have_lock_value, have_lock_value)
+        self.connection.write_reg(self.have_lock_radian, have_lock_radian)
+        self.connection.write_reg(self.lower_guard_value, lower_guard_value)
+        self.connection.write_reg(self.upper_guard_value, upper_guard_value)
+        self.connection.write_reg(self.power_ratio, power_ratio)
+        self.connection.write_reg(self.antenna_enable, antenna_enable)
 
 if __name__ == "__main__":
     #arg = sys.argv[1]

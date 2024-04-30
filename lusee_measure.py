@@ -105,8 +105,8 @@ class LuSEE_MEASURE:
         self.comm.load_fft_fifos()
 
         x = self.comm.get_pfb_data(header = False)
-        y = [hex(i) for i in x]
-        print(y)
+        #y = [hex(i) for i in x]
+        #print(y)
         # for i in range(len(y)):
         #     print(f"{i}:{y[i]}")
 
@@ -288,6 +288,27 @@ class LuSEE_MEASURE:
         result = self.comm.set_chan_gain(ch, in1, in2, gain)
         return result
 
+    def get_calibrator_data(self):
+        self.comm.reset_calibrator()
+        self.comm.setup_calibrator(Nac1 = 0x2,
+                                   Nac2 = 0x3,
+                                   notch_index = 0x2,
+                                   cplx_index = 29,
+                                   sum1_index = 32,
+                                   sum2_index = 36,
+                                   powertop_index = 32,
+                                   powerbot_index = 32,
+                                   driftFD_index = 32,
+                                   driftSD1_index = 26,
+                                   driftSD2_index = 2,
+                                   default_drift = 0x00005088,
+                                   have_lock_value = 0x0002A2A,
+                                   have_lock_radian = 0x00000D6C,
+                                   lower_guard_value = 0xFFFEBDE1,
+                                   upper_guard_value = 0x6487ED51,
+                                   power_ratio = 0x1,
+                                   antenna_enable = 0xF)
+
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         arg = sys.argv[1]
@@ -327,46 +348,8 @@ if __name__ == "__main__":
     #print(measure.comm.read_sys_timestamp())
     x = measure.get_adc1_data()
     measure.plot(measure.twos_comp(x, 14))
-
-    # x = measure.get_adc2_data()
-    # measure.plot(measure.twos_comp(x, 14))
-    #
-    # x = measure.get_adc3_data()
-    # measure.plot(measure.twos_comp(x, 14))
-    #
-    # x = measure.get_adc4_data()
-    # measure.plot(measure.twos_comp(x, 14))
-    #
-    # a,b = measure.get_adc2_header_data()
-    # print(b)
-    #
-    # c = measure.get_counter_data(0x100)
-    # print(c[0])
-    #
-    # e = measure.get_adcs_sync()
-    # measure.plot(measure.twos_comp(e[0], 14))
-    #
-    #d = measure.get_pfb_data()
-
-    #measure.adc_cycle()
-
-    #print(f"Multiplexer array is {bin(f)}")
-
-    #x = measure.get_adc1_data()
-    #print(x)
-    #measure.save_adc_for_simulation(x)
-    #measure.plot(measure.twos_comp(x, 14))
-
-    #x = measure.get_adc2_data()
-    #measure.plot(measure.twos_comp(x, 14))
-
-    #measure.comm.stop_spectrometer()
-    #input("ready?")
-    #d = measure.get_pfb_data()
-    d = measure.get_pfb_data_all_fpga()
-    #input("ready?")
-    e = measure.get_pfb_data_sw()
-
-    x = measure.get_adc1_data()
-    measure.plot(measure.twos_comp(x, 14))
+    measure.get_pfb_data()
+    measure.get_calibrator_data()
+    #measure.get_pfb_data_all_fpga()
+    #measure.get_pfb_data_sw()
     #You can save/plot the output data however you wish!
