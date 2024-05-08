@@ -53,7 +53,7 @@ class LuSEE_BOOTLOADER:
             print(f"{self.name}Microcontroller reset")
         else:
             sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
-        Send remain in bootloader message
+        #Send remain in bootloader message
         self.connection.send_bootloader_message(self.REMAIN)
 
     #NOT IMPLEMENTED IN BOOTLOADER YET
