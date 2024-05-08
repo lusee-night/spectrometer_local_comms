@@ -477,4 +477,4 @@ if __name__ == "__main__":
     #arg = sys.argv[1]
     luseeEthernet = LuSEE_ETHERNET()
 
-    print(luseeEthernet.read_cdi_reg(10))
+    print(luseeEthernet.read_cdi_reg(0x120))
