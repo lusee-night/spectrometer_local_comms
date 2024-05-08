@@ -599,6 +599,7 @@ class LuSEE_COMMS:
 
     def reset_calibrator(self):
         self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_bit)
+        self.connection.write_reg(self.calibrator_reset, 0)
 
     def reset_calibrator_formatter(self):
         self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_formatter_bit)
@@ -624,6 +625,15 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.upper_guard_value, upper_guard_value)
         self.connection.write_reg(self.power_ratio, power_ratio)
         self.connection.write_reg(self.antenna_enable, antenna_enable)
+
+        self.connection.write_reg(0x421, 0xFF)
+        self.connection.write_reg(0x813, 1)
+        self.reset_calibrator()
+        self.reset_calibrator_formatter()
+        input("Ready?")
+        self.reset_calibrator()
+        self.reset_calibrator_formatter()
+        self.connection.write_reg(0x421, 0x0)
 
 if __name__ == "__main__":
     #arg = sys.argv[1]

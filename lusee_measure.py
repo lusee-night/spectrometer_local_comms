@@ -89,7 +89,7 @@ class LuSEE_MEASURE:
         self.comm.set_sticky_error(0x0)
 
         #Notch not working yet
-        self.comm.set_notch_average(4)
+        self.comm.set_notch_average(6)
         self.comm.notch_filter_on()
         #self.comm.notch_filter_off()
 
@@ -173,7 +173,7 @@ class LuSEE_MEASURE:
         #We will read from microcontroller
         self.comm.readout_mode("sw")
         #Need to set these
-        self.comm.set_main_average(12)
+        self.comm.set_main_average(16)
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
         self.comm.spectrometer_test_mode(0)
@@ -289,7 +289,6 @@ class LuSEE_MEASURE:
         return result
 
     def get_calibrator_data(self):
-        self.comm.reset_calibrator()
         self.comm.setup_calibrator(Nac1 = 0x2,
                                    Nac2 = 0x3,
                                    notch_index = 0x2,

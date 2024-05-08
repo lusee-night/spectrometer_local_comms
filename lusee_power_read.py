@@ -4,6 +4,7 @@ import pandas as pd
 
 from lusee_hk_eric import LuSEE_HK
 from lusee_comm import LuSEE_COMMS
+from lusee_measure import LuSEE_MEASURE
 
 #A class for each test so we can easily loop through them pick out these properties
 class POWER_TEST:
@@ -17,7 +18,7 @@ class LuSEE_POWER:
     def __init__(self, name):
         self.version = 1.01
         self.hk = LuSEE_HK()
-        self.comm = LuSEE_COMMS()
+        self.measure = LuSEE_MEASURE()
         self.name = name
         
         #Input voltages on cable, used for LDO power consumption
@@ -131,10 +132,7 @@ class LuSEE_POWER:
         #Tests are run sequentially, the settings are applied, then power data is collected
         #Each listing needs a name and what to set the 3 "disable spectrometer" registers to
         self.tests = []
-        self.tests.append(POWER_TEST(name = "DDR on, ADC off, SPE off, uC off", uc_disable = 0x5, adc_disable = 0x3, spe_enable = 0x0))
-        self.tests.append(POWER_TEST(name = "DDR on, ADC on, SPE off, uC off", uc_disable = 0x5, adc_disable = 0x0, spe_enable = 0x0))
-        self.tests.append(POWER_TEST(name = "DDR on, ADC on, SPE on, uC off", uc_disable = 0x5, adc_disable = 0x0, spe_enable = 0x1))
-        self.tests.append(POWER_TEST(name = "DDR on, ADC on, SPE on, uC on", uc_disable = 0x0, adc_disable = 0x0, spe_enable = 0x1))
+        self.tests.append(POWER_TEST(name = "DDR on", uc_disable = 0x5, adc_disable = 0x3, spe_enable = 0x0))
 
         #When power data is collected, it happens in this order
         #Each listing needs the value to set the multiplexer chain to to bring the reading to the HK ADC
@@ -208,31 +206,21 @@ class LuSEE_POWER:
         self.df = pd.DataFrame(self.initial_df, columns=[f"{self.name}"])
 
     def sequence(self):
-        #Does the typical initialization of the FPGA for spectrometer usage
-        self.comm.reset()
-        #Analog multiplexers connect channel 0 to input 0 with low gain
-        f = self.comm.set_chan_gain(0, 0, 4, 0)
-        f = self.comm.set_chan_gain(1, 1, 4, 0)
-        f = self.comm.set_chan_gain(2, 2, 4, 0)
-        f = self.comm.set_chan_gain(3, 3, 4, 0)
+        self.measure.set_analog_mux(0, 0, 4, 0)
+        self.measure.set_analog_mux(1, 1, 4, 0)
+        self.measure.set_analog_mux(2, 2, 4, 0)
+        self.measure.set_analog_mux(3, 3, 4, 0)
+        x = self.measure.get_adc1_data()
+        self.measure.plot(self.measure.twos_comp(x, 14))
+        x = self.measure.get_adc2_data()
+        self.measure.plot(self.measure.twos_comp(x, 14))
+        x = self.measure.get_adc3_data()
+        self.measure.plot(self.measure.twos_comp(x, 14))
+        x = self.measure.get_adc4_data()
+        self.measure.plot(self.measure.twos_comp(x, 14))
 
-        #Spectrometer settings
-        self.comm.set_function("FFT1")
-        self.comm.set_main_average(10)
-        self.comm.set_notch_average(4)
-        self.comm.notch_filter_on()
-
-        #Runs the spectrometer. Components will be turned off through registers
-        self.comm.start_spectrometer()
-
-        #Select which FFT to read out
-        self.comm.select_fft("A1")
-        #Need to set these as well for each FFT you read out
-        self.comm.set_index_array("A1", 0x1F, "main")
-        self.comm.set_index_array("A1", 0x1F, "notch")
-
-        self.comm.reset_all_fifos()
-        self.comm.load_fft_fifos()
+        self.measure.get_calibrator_data()
+        self.measure.get_pfb_data_sw()
 
         print("Setting up internal FPGA voltage readings")
         self.hk.setup_fpga_internal()
@@ -251,7 +239,7 @@ class LuSEE_POWER:
 
         #Each test sets the hardware configuration for it, and then conducts the measurements
         for i in self.tests:
-            self.prepare_test(i)
+            #self.prepare_test(i)
             self.power_sequence(i.name)
             all_indexes.append(i.name)
 
@@ -318,12 +306,12 @@ class LuSEE_POWER:
     #Just writes the registers that enable/disable parts of the spectrometer and waits for power to settle
     def prepare_test(self, test):
         print(f"Preparing test {test.name}")
-        self.comm.connection.write_reg(self.uc_disable, test.uc_disable)
-        self.comm.connection.write_reg(self.adc_disable, test.adc_disable)
-        self.comm.connection.write_reg(self.spe_enable, test.spe_enable)
-        print(f"Waiting {self.delay} seconds for power to stabilize")
-        time.sleep(self.delay)
-        print(self.comm.connection.read_reg(0))
+        #self.comm.connection.write_reg(self.uc_disable, test.uc_disable)
+        #self.comm.connection.write_reg(self.adc_disable, test.adc_disable)
+        #self.comm.connection.write_reg(self.spe_enable, test.spe_enable)
+        #print(f"Waiting {self.delay} seconds for power to stabilize")
+        #time.sleep(self.delay)
+        #print(self.comm.connection.read_reg(0))
 
     #Measures all the desired tests. The name argument is just the name of the configuration, "FFT off" for example
     def power_sequence(self, name):
@@ -444,7 +432,7 @@ class LuSEE_POWER:
         except KeyboardInterrupt:
             pass
 
-        self.comm.connection.write_reg(self.ud_ddr_disable, 0x400)
+        #self.comm.connection.write_reg(self.ud_ddr_disable, 0x400)
         print("switched")
 
         try:

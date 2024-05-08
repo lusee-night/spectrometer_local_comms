@@ -53,8 +53,8 @@ class LuSEE_BOOTLOADER:
             print(f"{self.name}Microcontroller reset")
         else:
             sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
-        #Send remain in bootloader message
-        #self.connection.send_bootloader_message(self.REMAIN)
+        Send remain in bootloader message
+        self.connection.send_bootloader_message(self.REMAIN)
 
     #NOT IMPLEMENTED IN BOOTLOADER YET
     def remain(self):
@@ -100,6 +100,7 @@ class LuSEE_BOOTLOADER:
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_delete_phrase + region)
         self.connection.send_bootloader_message(self.DELETE_FLASH_REGION + (region << 8))
         print(f"{self.name}Command sent to delete region {region}")
+        time.sleep(1) #Without the wait, the next commands don't get registered
 
     #Begins a quick DDR test, does not get a confirmation packet
     def ddr_quick_test(self):
@@ -193,7 +194,7 @@ class LuSEE_BOOTLOADER:
         leftover = array_length % 64 #The last page may not be filled, so we need to know when to start padding 0s
         program_size = len(write_array)
         program_checksum = self.convert_checksum(sum(write_array), 32)
-        print(f"Program size is {hex(program_size)} and program checksum is {hex(program_checksum)}")
+        print(f"{self.name}Program size is {hex(program_size)} and program checksum is {hex(program_checksum)}")
 
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_enable_phrase + region)
         #Run through all full pages
@@ -234,21 +235,33 @@ class LuSEE_BOOTLOADER:
         self.connection.write_reg(self.bootloader_flash_page_reg, page_num)
         self.connection.send_bootloader_message(self.WRITE_TO_FLASH + (region << 8))
 
+    #Because Jack has not implemented the the fix for the bootloader's incorrect calculation of program size and checksum, we may need to use this
+    def write_incorrect_metadata(self, region):
+        #Write all the metadata
+        self.connection.write_reg(self.bootloader_metadata_enable_reg, self.bootloader_flash_enable_phrase + region)
+        self.connection.write_reg(self.bootloader_metadata_size_reg, 0xBBBB)
+        self.connection.write_reg(self.bootloader_metadata_checksum_reg, 0xAAAAAAAA)
+        self.connection.send_bootloader_message(self.WRITE_METADATA + (region << 8))
+
+        self.connection.write_reg(self.bootloader_metadata_enable_reg, 0)
+
+
 if __name__ == "__main__":
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
     boot.init_bootloader()
     #time.sleep(0.1)
-    #boot.remain()
-    boot.get_program_info()
-    boot.load_region(region = 1)
-    boot.get_program_info()
+    boot.remain()
+    #boot.get_program_info()
+    #boot.load_region(region = 1)
+    #boot.get_program_info()
     #boot.read_loaded_program()
     #boot.ddr_quick_test()
 
     boot.file_path = sys.argv[1]
     boot.delete_region(region = 1)
-    time.sleep(3) #Have to add this because Jack gives us no feedback as to when the delete is finished
+    #time.sleep(3) #Have to add this because Jack gives us no feedback as to when the delete is finished
     boot.write_hex_bootloader(region = 1)
+    #boot.write_incorrect_metadata(region = 1)
 
-    boot.launch_software()
+    #boot.launch_software()
