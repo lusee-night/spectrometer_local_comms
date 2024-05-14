@@ -295,8 +295,8 @@ class LuSEE_MEASURE:
                                    cplx_index = 29,
                                    sum1_index = 32,
                                    sum2_index = 36,
-                                   powertop_index = 32,
-                                   powerbot_index = 32,
+                                   powertop_index = 8,
+                                   powerbot_index = 16,
                                    driftFD_index = 32,
                                    driftSD1_index = 26,
                                    driftSD2_index = 2,
@@ -305,8 +305,56 @@ class LuSEE_MEASURE:
                                    have_lock_radian = 0x00000D6C,
                                    lower_guard_value = 0xFFFEBDE1,
                                    upper_guard_value = 0x6487ED51,
-                                   power_ratio = 0x1,
+                                   power_ratio = 0x0,
                                    antenna_enable = 0xF)
+
+        #sys.exit("Done")
+        #Need to set these
+        self.comm.set_main_average(16)
+        self.comm.set_notch_average(6)
+        self.comm.set_cal_sticky_error(1)
+        self.comm.notch_filter_on()
+        #We will read from microcontroller
+        self.comm.readout_mode("sw")
+        #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
+        self.comm.start_spectrometer()
+        self.comm.set_all_index(0x18)
+
+        data_good = False
+        errors = 0
+        while (not data_good):
+            #Use this function to get all 16 correlations from the software
+            x = self.comm.get_calib_data_sw(header = False, avg = 6, test = True)
+            #If there was an error with receiving data, it means you don't have all 16 channel subarrays
+            #Or at least one of them is empty
+            if (len(x) == 10 and (len(i) != 0 for i in x)):
+                data_good = True
+            else:
+                errors += 1
+                self.comm.stop_spectrometer()
+                self.comm.start_spectrometer()
+                print(f"Length of 16 ch array is {len(x)}")
+                for i in range(16):
+                    try:
+                        print(f"Length of data channel {i} is {len(x[i])}")
+                    except:
+                        pass
+            if (errors > 10):
+                print("More than 10 errors in lusee_measure, exiting")
+                break
+        y = []
+        for i in x:
+            y.append([hex(j) for j in i])
+        for i in y:
+            print("-----")
+            print(i)
+        #print(y)
+        # for i in range(len(y)):
+        #     print(f"-{i}:{y[i]}-", end="")
+        for i in range(10):
+            #print([hex(j) for j in x[i]])
+            #self.check_test_vals(x[i], i)
+            self.plot_fft(self.twos_comp(x[i], 32), f"{self.get_key(i)}_calibrator")
 
 if __name__ == "__main__":
     if (len(sys.argv) > 1):

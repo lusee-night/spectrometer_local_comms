@@ -210,7 +210,7 @@ class LuSEE_ETHERNET:
         self.write_reg(self.tlm_reg, 0)
 
     def get_data_packets(self, data_type, num=1, header = False):
-        if ((data_type != "adc") and (data_type != "fft") and (data_type != "sw")):
+        if ((data_type != "adc") and (data_type != "fft") and (data_type != "sw") and (data_type != "cal")):
             print(f"Python Ethernet --> Error in 'get_data_packets': Must request 'adc' or 'fft' or 'sw' as 'data_type'. You requested {data_type}")
             return []
         numVal = int(num)
@@ -221,7 +221,7 @@ class LuSEE_ETHERNET:
         sock_data.settimeout(self.udp_timeout)
         #Read a certain amount of packets
         incoming_packets = []
-        if (data_type != 'sw'):
+        if (data_type != 'sw' and data_type != 'cal'):
             self.start()
         else:
             self.request_sw_packet()
@@ -251,6 +251,8 @@ class LuSEE_ETHERNET:
         sock_data.close()
         if (data_type == "adc"):
             formatted_data, header_dict = self.check_data_adc(incoming_packets)
+        elif (data_type == "cal"):
+            formatted_data, header_dict = self.check_data_cal(incoming_packets)
         else:
             formatted_data, header_dict = self.check_data_pfb(incoming_packets)
         if (header):
@@ -322,6 +324,33 @@ class LuSEE_ETHERNET:
 
         #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
         formatted_data2 = struct.unpack_from(">2048I",raw_data)
+        #But each 2 byte section of the 4 byte value is reversed
+        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+        return formatted_data3, header_dict
+
+    def check_data_cal(self, data):
+        udp_packet_count = 0
+        cdi_packet_count = 0
+        header_dict = {}
+        #Packet format defined by Jack Fried in VHDL for custom CDI interface
+        #Headers come in as 16 bit words. ADC and counter payload comes in as 16 bit words
+        #FFT data comes in as 32 bit words. There are 13 header bytes. That's where the problem starts.
+        #These variables are to communicate state between the loops for datums that are split between packets
+        even = True;
+        carry_val = 0;
+        raw_data = bytearray()
+        for num,i in enumerate(data):
+            header_dict[num] = {}
+            #print(f"Length is {len(i)}")
+            unpack_buffer = int((len(i))/2)
+            #Unpacking into shorts in increments of 2 bytes just for the header
+            formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
+            header_dict[num] = self.organize_header(formatted_data)
+            #Payload starts at nibble 26
+            raw_data.extend(i[26:])
+
+        #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
+        formatted_data2 = struct.unpack_from(">1024I",raw_data)
         #But each 2 byte section of the 4 byte value is reversed
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict

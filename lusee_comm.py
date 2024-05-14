@@ -324,6 +324,9 @@ class LuSEE_COMMS:
     def set_sticky_error(self, sticky):
         self.connection.write_reg(self.error_stick, int(sticky))
 
+    def set_cal_sticky_error(self, sticky):
+        self.connection.write_reg(self.cal_error_stick, int(sticky))
+
     def set_all_index(self, val):
         for key in self.fft_sel:
             self.set_index_array(key, val, "main")
@@ -574,6 +577,105 @@ class LuSEE_COMMS:
                 #Clear the acknowledge flag to tell microcontroller to check our response
                 self.connection.write_reg(self.client_ack, 0)
             all_data.append(data)
+        return all_data
+
+    def get_calib_data_sw(self, header = False, avg = None, test = False):
+        if (avg != None):
+            self.avg = avg
+        #Put Python in control of readout
+        self.connection.write_reg(self.client_control, 1)
+
+        #This function could get called again with the FIFO and microcontroller cut short after errors
+        #Tells the microcontroller sequence to reset
+        self.connection.write_reg(self.scratchpad_2, 1)
+        #Resets the CDI output FIFOs
+        self.connection.write_reg(self.fifo_rst, 1)
+        self.connection.write_reg(self.scratchpad_2, 0)
+        self.connection.write_reg(self.fifo_rst, 0)
+        #Calibrator outputs will go to microcontroller
+        if (test):
+            #Enables the test bit as well
+            self.connection.write_reg(0x838, 0x2000)
+            self.connection.write_reg(self.CF_TST_Mode_En, 1)
+        else:
+            self.connection.write_reg(self.CF_TST_Mode_En, 0)
+        self.connection.write_reg(self.CF_Enable, 1)
+
+        all_data = []
+        #Wait for averaging
+        wait_time = self.cycle_time * (2**self.avg)
+        if (wait_time > 1.0):
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+        time.sleep(self.cycle_time * (2**self.avg))
+        #Stop sending spectrometer data to microcontroller
+        #self.connection.write_reg(self.df_enable, 0)
+        #Will return all 16 correlations
+        for i in range(10):
+            #Allows us to repeat, since we've gotten errors where a channel doesn't come on the first try
+            received = False
+            errors = 0
+            num_packets = 2
+            dtype = "cal"
+            while (not received):
+                apid = 0x210 + i
+                wait_i = 0
+                #Wait for microcontroller to say that data has been returned back to CDI buffer
+                while(self.connection.read_reg(self.client_ack) == 0x0):
+                    if (wait_i > 10):
+                        print("Flag didn't go high within 10 seconds of expected time, exiting")
+                        return all_data
+                    print("Waiting for data CDI flag to go high")
+                    time.sleep(1)
+                    wait_i = wait_i + 1
+                print(f"Flag is high, Python can now read channel {i}")
+                #Get data from CDI microcontroller buffer, header to check that APID was correct
+                data, header = self.connection.get_data_packets(data_type=dtype, num=num_packets, header = True)
+                if header == []:
+                    self.connection.write_reg(self.scratchpad_1, 0x10 + (apid & 0xF))
+                    received = False
+                    errors += 1
+                    print(f"Header is empty")
+                    print(f"Retrying channel {i}")
+                else:
+                    #Data usually comes in 3 packets and has 3 separate headers
+                    for pkt in range(num_packets):
+                        if pkt in header:
+                            if 'ccsds_appid' in header[pkt]:
+                                if (int(header[pkt]['ccsds_appid'], 16) == apid):
+                                    #This is the successful case where everything matches
+                                    self.connection.write_reg(self.scratchpad_1, (apid & 0xF))
+                                    #print(f"Wrote {apid & 0xF} to scratchpad")
+                                    received = True
+                                else:
+                                    self.connection.write_reg(self.scratchpad_1, 0x20 + (apid & 0xF))
+                                    received = False
+                                    errors += 1
+                                    print(f"Expected APID was {apid} and received APID was {int(header[pkt]['ccsds_appid'], 16)}")
+                                    print(f"Retrying channel {i}")
+                                    break
+                            else:
+                                self.connection.write_reg(self.scratchpad_1, 0x30 + (apid & 0xF))
+                                received = False
+                                errors += 1
+                                print("ccsds_appid not in the header dictionary")
+                                print(f"Retrying channel {i}")
+                                break
+                        else:
+                            self.connection.write_reg(self.scratchpad_1, 0x40 + (apid & 0xF))
+                            received = False
+                            errors += 1
+                            print(f"Header doesn't have key {pkt}")
+                            print(f"Retrying channel {i}")
+                            break
+                if (errors > 10):
+                    print("That's 10 errors in a row in lusee_comm, exiting")
+                    return all_data
+                #Clear the acknowledge flag to tell microcontroller to check our response
+                self.connection.write_reg(self.client_ack, 0)
+            all_data.append(data)
+            if (i == 1):
+                num_packets = 3
+                dtype = "sw"
         return all_data
 
     def set_chan_gain(self, ch, in1, in2, gain):
