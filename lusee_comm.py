@@ -4,7 +4,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.08
+        self.version = 1.09
 
         self.connection = LuSEE_ETHERNET()
 

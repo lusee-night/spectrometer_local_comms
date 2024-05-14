@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.11
+        self.version = 1.12
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -60,17 +60,23 @@ class LuSEE_ETHERNET:
         self.write_reg(self.spectrometer_reset,0)
         time.sleep(2)
         self.write_cdi_reg(self.cdi_reset,1)
-        time.sleep(3)
-        self.write_cdi_reg(self.cdi_reset,0)
         time.sleep(2)
+        self.write_cdi_reg(self.cdi_reset,0)
+        time.sleep(1)
         self.write_cdi_reg(self.latch_register, 0)
         time.sleep(self.wait_time)
 
     def toggle_cdi_latch(self):
         self.write_cdi_reg(self.latch_register, 1)
         time.sleep(self.wait_time)
-        self.write_cdi_reg(self.latch_register, 0)
-        time.sleep(self.wait_time)
+        attempt = 0
+        while True:
+            if ((self.read_cdi_reg(self.latch_register)) >> 31):
+                break
+            else:
+                attempt += 1
+            if (attempt > 10):
+                sys.exit(f"Python Ethernet --> Error in writing to DCB emulator. Register 1 is {hex(self.read_cdi_reg(self.latch_register))}")
 
     def write_reg(self, reg, data):
         for i in range(10):
@@ -84,20 +90,20 @@ class LuSEE_ETHERNET:
 
             dataMSB = self.first_data_pack + dataValMSB
             self.write_cdi_reg(self.write_register, dataMSB)
-            time.sleep(self.wait_time)
+            #time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             dataLSB = self.second_data_pack + dataValLSB
             self.write_cdi_reg(self.write_register, dataLSB)
-            time.sleep(self.wait_time)
+            #time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             address_value = self.address_write + reg
             self.write_cdi_reg(self.write_register, address_value)
-            time.sleep(self.wait_time)
+            #time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
-            time.sleep(self.wait_time)
+            #time.sleep(self.wait_time)
             readback = self.read_reg(reg)
             if (readback == data):
                 break
@@ -173,7 +179,7 @@ class LuSEE_ETHERNET:
                     sock_readresp.close()
                     return None
                 else:
-                    print ("Python Ethernet --> Didn't get a readback response, trying again...")
+                    print (f"Python Ethernet --> Didn't get a readback response for {hex(reg)}, trying again...")
 
             #print ("Waited for FEMB response on")
             #print (sock_readresp.getsockname())
@@ -202,7 +208,7 @@ class LuSEE_ETHERNET:
 
     def start(self):
         self.write_reg(self.start_tlm_data, 1)
-        time.sleep(self.wait_time)
+        #time.sleep(self.wait_time)
         self.write_reg(self.start_tlm_data, 0)
 
     def request_sw_packet(self):

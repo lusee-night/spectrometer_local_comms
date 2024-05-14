@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.08
+        self.version = 1.09
         self.comm = LuSEE_COMMS()
 
     def set_all_adc_ramp(self):
@@ -380,7 +380,7 @@ if __name__ == "__main__":
 
     if (arg == "reset"):
         measure.comm.reset()
-        measure.comm.reset_adc(adc = 0)
+        measure.comm.reset_adc(adc0 = True, adc1 = True)
 
     if (arg == "adc"):
         measure.set_all_adc_ramp()
