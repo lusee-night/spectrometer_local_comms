@@ -129,6 +129,8 @@ class LuSEE_COMMS:
         self.counter_num = None
         self.cycle_time = 40e-6
         self.avg = 0
+        self.Nac1_val = 0
+        self.Nac2_val = 0
         self.wait_time = 0.025
 
     #Only need to do one in the beginning
@@ -579,9 +581,14 @@ class LuSEE_COMMS:
             all_data.append(data)
         return all_data
 
-    def get_calib_data_sw(self, header = False, avg = None, test = False):
+    def get_calib_data_sw(self, header = False, avg = None, Nac1 = None, Nac2 = None, test = False):
         if (avg != None):
             self.avg = avg
+        if (Nac1 != None):
+            self.Nac1_val = Nac1
+        if (Nac2 != None):
+            self.Nac2_val = Nac2
+
         #Put Python in control of readout
         self.connection.write_reg(self.client_control, 1)
 
@@ -595,7 +602,6 @@ class LuSEE_COMMS:
         #Calibrator outputs will go to microcontroller
         if (test):
             #Enables the test bit as well
-            self.connection.write_reg(0x838, 0x2000)
             self.connection.write_reg(self.CF_TST_Mode_En, 1)
         else:
             self.connection.write_reg(self.CF_TST_Mode_En, 0)
@@ -603,14 +609,14 @@ class LuSEE_COMMS:
 
         all_data = []
         #Wait for averaging
-        wait_time = self.cycle_time * (2**self.avg)
+        wait_time = self.cycle_time * (2**self.avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.3
         if (wait_time > 1.0):
-            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
-        time.sleep(self.cycle_time * (2**self.avg))
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg}, {self.Nac1_val}, {self.Nac2_val} averages")
+        time.sleep(wait_time)
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
-        for i in range(10):
+        for i in range(28):
             #Allows us to repeat, since we've gotten errors where a channel doesn't come on the first try
             received = False
             errors = 0
@@ -641,18 +647,8 @@ class LuSEE_COMMS:
                     for pkt in range(num_packets):
                         if pkt in header:
                             if 'ccsds_appid' in header[pkt]:
-                                if (int(header[pkt]['ccsds_appid'], 16) == apid):
-                                    #This is the successful case where everything matches
-                                    self.connection.write_reg(self.scratchpad_1, (apid & 0xF))
-                                    #print(f"Wrote {apid & 0xF} to scratchpad")
-                                    received = True
-                                else:
-                                    self.connection.write_reg(self.scratchpad_1, 0x20 + (apid & 0xF))
-                                    received = False
-                                    errors += 1
-                                    print(f"Expected APID was {apid} and received APID was {int(header[pkt]['ccsds_appid'], 16)}")
-                                    print(f"Retrying channel {i}")
-                                    break
+                                self.connection.write_reg(self.scratchpad_1, (apid & 0xF))
+                                received = True
                             else:
                                 self.connection.write_reg(self.scratchpad_1, 0x30 + (apid & 0xF))
                                 received = False
@@ -672,10 +668,8 @@ class LuSEE_COMMS:
                     return all_data
                 #Clear the acknowledge flag to tell microcontroller to check our response
                 self.connection.write_reg(self.client_ack, 0)
+                print(f"Recieved proper packet of {int(header[pkt]['ccsds_appid'], 16)}")
             all_data.append(data)
-            if (i == 1):
-                num_packets = 3
-                dtype = "sw"
         return all_data
 
     def set_chan_gain(self, ch, in1, in2, gain):
@@ -707,7 +701,8 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_formatter_bit)
 
     def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,
-                         driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable):
+                         driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable,
+                         power_slice, fdsd_slice, fdxsdx_slice):
 
         self.connection.write_reg(self.Nac1, Nac1)
         self.connection.write_reg(self.Nac2, Nac2)
@@ -728,10 +723,19 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.power_ratio, power_ratio)
         self.connection.write_reg(self.antenna_enable, antenna_enable)
 
+        self.connection.write_reg(0x83D, power_slice)
+        self.connection.write_reg(0x83E, fdsd_slice)
+        self.connection.write_reg(0x83F, fdxsdx_slice)
+
         self.connection.write_reg(0x421, 0xFF)
         self.connection.write_reg(0x813, 1)
         self.reset_calibrator()
         self.reset_calibrator_formatter()
+        #self.connection.write_reg(0x838, 1)
+        #self.connection.write_reg(0x839, 1)
+        #self.connection.write_reg(0x83A, 1)
+        #self.connection.write_reg(0x83B, 1)
+        #self.connection.write_reg(0x83C, 1)
         input("Ready?")
         self.reset_calibrator()
         self.reset_calibrator_formatter()
