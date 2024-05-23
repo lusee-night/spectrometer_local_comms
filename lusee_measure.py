@@ -7,7 +7,7 @@ from lusee_comm import LuSEE_COMMS
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.09
+        self.version = 1.10
         self.comm = LuSEE_COMMS()
 
     def set_all_adc_ramp(self):
@@ -253,16 +253,16 @@ class LuSEE_MEASURE:
         for i in range(num_repetitions+1):
             adc_data.append(data[i*2048:(i*2048)+2048])
             names.append(i)
-        print(data[2046:2050])
-        print(adc_data[0][2046:])
-        print(adc_data[1][0:2])
-        print(f"Length of one is {len(adc_data[0])}")
-        print(f"Length of two is {len(adc_data[1])}")
-        print(adc_data[0])
-        print("---")
-        print(adc_data[1])
-        print("---")
-        print(adc_data[2])
+        #print(data[2046:2050])
+        #print(adc_data[0][2046:])
+        #print(adc_data[1][0:2])
+        #print(f"Length of one is {len(adc_data[0])}")
+        #print(f"Length of two is {len(adc_data[1])}")
+        #print(adc_data[0])
+        #print("---")
+        #print(adc_data[1])
+        #print("---")
+        #print(adc_data[2])
 
         self.plot_multiple(adc_data, title, "ADC Counts", "ADC Values", names)
         self.plot_multiple([adc_data[0], adc_data[2], adc_data[4], adc_data[6]], title, "ADC Counts", "ADC Values", names)
@@ -328,7 +328,7 @@ class LuSEE_MEASURE:
     def get_calibrator_data(self, setup = False):
         notch_ave = 6
         Nac1 = 2
-        Nac2 = 4
+        Nac2 = 10
         if (setup):
             self.comm.setup_calibrator(Nac1 = Nac1,
                                     Nac2 = Nac2,
@@ -382,11 +382,11 @@ class LuSEE_MEASURE:
             self.plot_fft(self.twos_comp(x[i], 32), f"{self.test_name}_{names[num]}")
 
         self.plot(x[8], "Lock", "Cycles", "Value")
-        self.plot(x[9], "Drift", "Cycles", "Value")
+        self.plot(self.twos_comp(x[9], 32), "Drift", "Cycles", "Value")
 
         names = ["Top1", "Top2", "Top3", "Top4", "Bot1", "Bot2", "Bot3", "Bot4"]
         for num,i in enumerate(range(10, 18, 1)):
-            self.plot(x[i], f"{self.test_name}_{names[num]}", "Cycles", "Value")
+            self.plot(self.twos_comp([i], 32), f"{self.test_name}_{names[num]}", "Cycles", "Value")
         self.plot_multiple(x[10:18], "All power signals", "Cycles", "Value", names)
 
         names = ["FD1", "FD2", "FD3", "FD4", "SD1", "SD2", "SD3", "SD4", "FDX", "SDX"]

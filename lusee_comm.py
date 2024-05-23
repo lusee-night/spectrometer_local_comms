@@ -4,7 +4,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.09
+        self.version = 1.10
 
         self.connection = LuSEE_ETHERNET()
 
@@ -29,6 +29,7 @@ class LuSEE_COMMS:
         self.data_src_sel = 0x212
         self.fifo_rst = 0x213
         self.fft_select = 0x214
+        self.tlm_details = 0x219
         self.cdi_src_sel = 0x21F
         self.df_enable = 0x220
         self.df_drop_err = 0x224
@@ -256,22 +257,22 @@ class LuSEE_COMMS:
     def load_adc_fifos(self):
         old_val = self.connection.read_reg(self.load_data)
         new_val = old_val | 0x2
-        print(f"Python Debugging --> While loading ADC FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
+        #print(f"Python Debugging --> While loading ADC FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
         self.connection.write_reg(self.load_data, new_val)
         time.sleep(self.wait_time)
         self.connection.write_reg(self.load_data, old_val)
         time.sleep(self.wait_time)
-        print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
+        #print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
 
     def load_fft_fifos(self):
         old_val = self.connection.read_reg(self.load_data)
         new_val = old_val | 0x4
-        print(f"Python Debugging --> While loading FFT FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
+        #print(f"Python Debugging --> While loading FFT FIFOs, the original register {hex(self.load_data)} value was {hex(old_val)} and we're trying to set it to {hex(new_val)}")
         self.connection.write_reg(self.load_data, new_val)
         time.sleep(self.wait_time)
         self.connection.write_reg(self.load_data, old_val)
         time.sleep(self.wait_time)
-        print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
+        #print(f"Python Debugging --> The final value is {hex(self.connection.read_reg(self.load_data))}")
 
     def get_df_drop_err(self):
         return self.connection.read_reg(self.df_drop_err)
@@ -620,7 +621,6 @@ class LuSEE_COMMS:
             #Allows us to repeat, since we've gotten errors where a channel doesn't come on the first try
             received = False
             errors = 0
-            num_packets = 2
             dtype = "cal"
             while (not received):
                 apid = 0x210 + i
@@ -634,8 +634,12 @@ class LuSEE_COMMS:
                     time.sleep(1)
                     wait_i = wait_i + 1
                 print(f"Flag is high, Python can now read channel {i}")
+                data_size = self.connection.read_reg(self.tlm_details) & 0xFFFF
+                num_packets = (data_size // (1024 - 13)) + 1
+                print(f"data_size is {data_size}, num_packets is {num_packets}")
                 #Get data from CDI microcontroller buffer, header to check that APID was correct
-                data, header = self.connection.get_data_packets(data_type=dtype, num=num_packets, header = True)
+                rawdata = self.connection.get_data_packets(data_type=dtype, num=num_packets, header = True)
+                data, header = self.connection.check_data_cal(data = rawdata, data_len = data_size)
                 if header == []:
                     self.connection.write_reg(self.scratchpad_1, 0x10 + (apid & 0xF))
                     received = False

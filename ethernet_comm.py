@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.12
+        self.version = 1.13
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -208,7 +208,7 @@ class LuSEE_ETHERNET:
 
     def start(self):
         self.write_reg(self.start_tlm_data, 1)
-        #time.sleep(self.wait_time)
+        time.sleep(self.wait_time)
         self.write_reg(self.start_tlm_data, 0)
 
     def request_sw_packet(self):
@@ -258,7 +258,7 @@ class LuSEE_ETHERNET:
         if (data_type == "adc"):
             formatted_data, header_dict = self.check_data_adc(incoming_packets)
         elif (data_type == "cal"):
-            formatted_data, header_dict = self.check_data_cal(incoming_packets)
+            return incoming_packets
         else:
             formatted_data, header_dict = self.check_data_pfb(incoming_packets)
         if (header):
@@ -334,7 +334,7 @@ class LuSEE_ETHERNET:
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict
 
-    def check_data_cal(self, data):
+    def check_data_cal(self, data, data_len):
         udp_packet_count = 0
         cdi_packet_count = 0
         header_dict = {}
@@ -356,7 +356,7 @@ class LuSEE_ETHERNET:
             raw_data.extend(i[26:])
 
         #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
-        formatted_data2 = struct.unpack_from(">1024I",raw_data)
+        formatted_data2 = struct.unpack_from(f">{data_len}I",raw_data)
         #But each 2 byte section of the 4 byte value is reversed
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict
