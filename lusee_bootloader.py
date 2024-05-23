@@ -100,7 +100,7 @@ class LuSEE_BOOTLOADER:
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_delete_phrase + region)
         self.connection.send_bootloader_message(self.DELETE_FLASH_REGION + (region << 8))
         print(f"{self.name}Command sent to delete region {region}")
-        time.sleep(1) #Without the wait, the next commands don't get registered
+        time.sleep(2) #Without the wait, the next commands don't get registered
 
     #Begins a quick DDR test, does not get a confirmation packet
     def ddr_quick_test(self):
@@ -195,7 +195,6 @@ class LuSEE_BOOTLOADER:
         program_size = len(write_array)
         program_checksum = self.convert_checksum(sum(write_array), 32)
         print(f"{self.name}Program size is {hex(program_size)} and program checksum is {hex(program_checksum)}")
-
         self.connection.write_reg(self.bootloader_flash_enable_reg, self.bootloader_flash_enable_phrase + region)
         #Run through all full pages
         for i in range(pages):

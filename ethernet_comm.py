@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.13
+        self.version = 1.14
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -90,20 +90,20 @@ class LuSEE_ETHERNET:
 
             dataMSB = self.first_data_pack + dataValMSB
             self.write_cdi_reg(self.write_register, dataMSB)
-            #time.sleep(self.wait_time)
+            time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             dataLSB = self.second_data_pack + dataValLSB
             self.write_cdi_reg(self.write_register, dataLSB)
-            #time.sleep(self.wait_time)
+            time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
             address_value = self.address_write + reg
             self.write_cdi_reg(self.write_register, address_value)
-            #time.sleep(self.wait_time)
+            time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
-            #time.sleep(self.wait_time)
+            time.sleep(self.wait_time)
             readback = self.read_reg(reg)
             if (readback == data):
                 break
@@ -207,9 +207,11 @@ class LuSEE_ETHERNET:
             print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
 
     def start(self):
+        print("Start start")
         self.write_reg(self.start_tlm_data, 1)
-        time.sleep(self.wait_time)
+        time.sleep(self.wait_time * 10)
         self.write_reg(self.start_tlm_data, 0)
+        print("End start")
 
     def request_sw_packet(self):
         self.write_reg(self.tlm_reg, 1)

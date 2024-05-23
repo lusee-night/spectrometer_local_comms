@@ -44,6 +44,20 @@ class LuSEE_COMMS:
         self.adc_reg_data = 0x303
         self.adc_clk = 0x310
         self.adc_cntl = 0x311
+        self.adc_stat_clr = 0x320
+        self.adc_stat_samples = 0x321
+        self.adc_stat_high_thr = 0x322
+        self.adc_stat_low_thr = 0x323
+        self.adc_stat_ready = 0x324
+        self.adc0_stat_avg_cnt = 0x330
+        self.adc0_stat_avg = 0x331
+        self.adc0_stat_savg = 0x332
+        self.adc0_stat_max = 0x333
+        self.adc0_stat_min = 0x334
+        self.adc0_stat_high_cnt = 0x335
+        self.adc0_stat_low_cnt = 0x336
+        self.adc0_stat_ovf = 0x337
+        self.adc_stat_next = 0x10
 
         self.sengine_reset = 0x400
         self.enable_spe = 0x401
@@ -57,6 +71,12 @@ class LuSEE_COMMS:
         self.notch_array1 = 0x416
         self.notch_array2 = 0x417
         self.notch_array3 = 0x418
+        self.spe_disable = 0x420
+        self.calibrator_and_notch_disable = 0x421
+        self.avg_disable = 0x422
+        self.corr_notch_disable = 0x423
+        self.corr_main_disable = 0x424
+        self.notch_subtract_disable = 0x425
         self.adc_min_threshold = 0x430
         self.adc_max_threshold = 0x431
         self.error_stick = 0x432
@@ -744,6 +764,33 @@ class LuSEE_COMMS:
         self.reset_calibrator()
         self.reset_calibrator_formatter()
         self.connection.write_reg(0x421, 0x0)
+
+    def get_adc_stats(self, num):
+        self.connection.write_reg(self.adc_stat_clr, 1)
+        self.connection.write_reg(self.adc_stat_samples, num)
+        self.connection.write_reg(self.adc_stat_high_thr, 0x3FFF)
+        self.connection.write_reg(self.adc_stat_low_thr, 0x0)
+        self.connection.write_reg(self.adc_stat_clr, 0)
+
+        while (self.connection.read_reg(self.adc_stat_ready) == 0):
+            print(f"Waiting for {num} samples, currently at {self.connection.read_reg(self.adc0_stat_avg_cnt)}")
+            time.sleep(1)
+
+        adc_results = {}
+        for i in range(4):
+            adc_results[f"ADC{i}_CNT"] = self.connection.read_reg(self.adc0_stat_avg_cnt + (i * self.adc_stat_next))
+
+            adc_results[f"ADC{i}_MAX"] = self.connection.read_reg(self.adc0_stat_max + (i * self.adc_stat_next))
+            adc_results[f"ADC{i}_MIN"] = self.connection.read_reg(self.adc0_stat_min + (i * self.adc_stat_next))
+            adc_results[f"ADC{i}_HIGH_CNT"] = self.connection.read_reg(self.adc0_stat_high_cnt + (i * self.adc_stat_next))
+            adc_results[f"ADC{i}_LOW_CNT"] = self.connection.read_reg(self.adc0_stat_low_cnt + (i * self.adc_stat_next))
+
+            overflow = self.connection.read_reg(self.adc0_stat_ovf + (i * self.adc_stat_next))
+
+            adc_results[f"ADC{i}_AVG"] = self.connection.read_reg(self.adc0_stat_avg + (i * self.adc_stat_next)) + ((overflow & 0xFF) << 32)
+            adc_results[f"ADC{i}_SAVG"] = self.connection.read_reg(self.adc0_stat_savg + (i * self.adc_stat_next)) + (((overflow & 0xFF0000) >> 16) << 32)
+
+        return adc_results
 
 if __name__ == "__main__":
     #arg = sys.argv[1]

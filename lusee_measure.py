@@ -328,7 +328,7 @@ class LuSEE_MEASURE:
     def get_calibrator_data(self, setup = False):
         notch_ave = 6
         Nac1 = 2
-        Nac2 = 10
+        Nac2 = 4
         if (setup):
             self.comm.setup_calibrator(Nac1 = Nac1,
                                     Nac2 = Nac2,
