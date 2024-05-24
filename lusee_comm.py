@@ -20,6 +20,7 @@ class LuSEE_COMMS:
         self.FW_Time = 0xFF
 
         self.uC_reset = 0x100
+        self.DDR_reg = 0x101
         self.scratchpad_1 = 0x120
         self.scratchpad_2 = 0x121
 

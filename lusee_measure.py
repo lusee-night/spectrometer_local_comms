@@ -177,8 +177,8 @@ class LuSEE_MEASURE:
         self.comm.set_notch_average(4)
         self.comm.set_sticky_error(0x0)
         self.comm.spectrometer_test_mode(0)
-        #self.comm.notch_filter_on()
-        self.comm.notch_filter_off()
+        self.comm.notch_filter_on()
+        #self.comm.notch_filter_off()
 
         #Runs the spectrometer. Can turn it off with stop_spectrometer to see power
         self.comm.start_spectrometer()

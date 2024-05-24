@@ -69,6 +69,37 @@ class LuSEE_POWER:
                                "1.0VD Output Current":0x13,
                                }
 
+        #Because of the voltage drop through the multiplexer array, we need to manually correct each measurement
+        #If the measurement is above 0.1V or so, the amount lost in the multiplexers is an even proportion
+        #However, the current measurements are less, and they have different proportions lost in the chain
+        self.correction = {
+                               "FPGA Thermistor (Kelvin)":1,
+                               "ADC0 Thermistor (Kelvin)":1,
+                               "ADC1 Thermistor (Kelvin)":1,
+
+                               "+5V Output Voltage":0.94,
+                               "+5V Output Current":0.95,
+                               "-5V Output Voltage":0.94,
+                               "-5V Output Current":0.95,
+
+                               "1.8VA Output Voltage":0.95,
+                               "1.8VA Output Current":0.95,
+                               "1.8VAD Output Voltage":0.95,
+                               "1.8VAD Output Current":0.95,
+
+                               "3.3VD Output Voltage":0.95,
+                               "3.3VD Output Current":0.90,
+                               "2.5VD Output Voltage":0.95,
+                               "2.5VD Output Current":0.45,
+
+                               "1.8VD Output Voltage":0.95,
+                               "1.8VD Output Current":0.88,
+                               "1.5VD Output Voltage":0.94,
+                               "1.5VD Output Current":0.91,
+                               "1.0VD Output Voltage":0.93,
+                               "1.0VD Output Current":0.94,
+                               }
+
         #Needed to translate the ADC readings for the current configurations to actual current
         self.resistors      = {"+5V Output Current": self.r75,
                                "-5V Output Current": self.r74,
@@ -148,10 +179,11 @@ class LuSEE_POWER:
         #self.measure.get_pfb_data_sw()
 
         self.settings_info['Register 0x100'] = hex(comm.connection.read_reg(comm.uC_reset))
-        self.settings_info['Register 0x500'] = hex(comm.connection.read_reg(comm.mux0_reg))
-        self.settings_info['Register 0x501'] = hex(comm.connection.read_reg(comm.mux1_reg))
-        self.settings_info['Register 0x502'] = hex(comm.connection.read_reg(comm.mux2_reg))
-        self.settings_info['Register 0x503'] = hex(comm.connection.read_reg(comm.mux3_reg))
+        self.settings_info['Register 0x101'] = hex(comm.connection.read_reg(comm.DDR_reg))
+        self.settings_info['ADC0 gain and config (Register 0x500)'] = hex(comm.connection.read_reg(comm.mux0_reg))
+        self.settings_info['ADC1 gain and config (Register 0x501)'] = hex(comm.connection.read_reg(comm.mux1_reg))
+        self.settings_info['ADC2 gain and config (Register 0x502)'] = hex(comm.connection.read_reg(comm.mux2_reg))
+        self.settings_info['ADC3 gain and config (Register 0x503)'] = hex(comm.connection.read_reg(comm.mux3_reg))
         self.settings_info['ADC Stats'] = "Work in progress, will show min and max ADC settings to demonstrate dynamic range of input signal"
         self.settings_info['Spectrometer Enabled'] = hex(comm.connection.read_reg(comm.enable_spe))
         self.settings_info['Spectrometer Averages'] = 2 ** comm.connection.read_reg(comm.main_average)
@@ -310,6 +342,10 @@ class LuSEE_POWER:
             #temp is the ADC's internal temperature, probably not useful
             adc0, adc4, temp = self.hk.read_hk_data()
             #print(f"ADC0 is {adc0} and ADC4 {adc4}")
+
+            #Correction needs to be applied because of the losses along the multiplexer chain
+            adc0 = adc0 / self.correction[key]
+            adc4 = adc4 / self.correction[key]
 
             #The ADC just measures whatever voltage was at the input
             #If we know we used the mux to redirect a current measurement from the INA901 chip, then we need to convert that voltage to the actual current
