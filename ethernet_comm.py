@@ -207,11 +207,9 @@ class LuSEE_ETHERNET:
             print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
 
     def start(self):
-        print("Start start")
         self.write_reg(self.start_tlm_data, 1)
-        time.sleep(self.wait_time * 10)
+        time.sleep(self.wait_time * 5)
         self.write_reg(self.start_tlm_data, 0)
-        print("End start")
 
     def request_sw_packet(self):
         self.write_reg(self.tlm_reg, 1)

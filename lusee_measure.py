@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import os
 import time
 import sys
+import math
 
 from lusee_comm import LuSEE_COMMS
 
@@ -9,6 +11,10 @@ class LuSEE_MEASURE:
     def __init__(self):
         self.version = 1.10
         self.comm = LuSEE_COMMS()
+        self.tick_size = 22
+        self.title_size = 32
+        self.subtitle_size = 28
+        self.label_size = 28
 
     def set_all_adc_ramp(self):
         self.comm.write_adc(0, 0x42, 0x08) #Enable digital functions on ADC0
@@ -284,6 +290,53 @@ class LuSEE_MEASURE:
 
         fig.savefig (os.path.join(plot_path, f"{title}.jpg"))
 
+    def plot_lock_power(self, data):
+        lock = [i&0x1 for i in data]
+        pwr1 = [(i&0x2) >> 1 for i in data]
+        pwr2 = [(i&0x4) >> 2 for i in data]
+        pwr3 = [(i&0x8) >> 3 for i in data]
+        pwr4 = [(i&0x10) >> 4 for i in data]
+
+        fig, (lock_ax, pwr1_ax, pwr2_ax, pwr3_ax, pwr4_ax) = plt.subplots(nrows=5, ncols=1, sharex=True, figsize=(32, 24))
+        axs = [lock_ax, pwr1_ax, pwr2_ax, pwr3_ax, pwr4_ax]
+        names = [["No Lock", "Lock"],["No Pwr1", "Pwr1 Used"],["No Pwr2", "Pwr2 Used"],["No Pwr3", "Pwr3 Used"],["No Pwr4", "Pwr4 Used"]]
+        datas = [lock, pwr1, pwr2, pwr3, pwr4]
+
+        plt.subplots_adjust(wspace=0, hspace=0, top = 0.90, bottom = 0.1, right = 0.92, left = 0.09)
+        fig.suptitle(f"{self.test_name} Process Parameters", fontsize = self.title_size)
+
+        for ax, name, dat in zip(axs, names, datas):
+            ax.plot(dat)
+            ax.set_yticks([0, 1], labels = name)
+            ax.set_ylim([-0.5, 1.5])
+            ax.tick_params(axis='y', labelsize=self.tick_size)
+        ax.set_xlabel("Cycle", fontsize=self.label_size)
+        ax.tick_params(axis='x', labelsize=self.tick_size)
+        plt.show()
+
+    def plot_drift(self, lock_data, drift):
+        print(f"Drift is {drift}")
+        lock = [i&0x1 for i in lock_data]
+
+        fig, drift_ax = plt.subplots()
+        fig.suptitle(f"{self.test_name} Drift Parameters", fontsize = self.title_size)
+
+        drift_ax.plot(drift)
+        drift_ax.set_yticks([-math.pi, math.pi], labels = [r'$-\pi$', r'$\pi$'])
+        drift_ax.set_ylim([-math.pi * 1.5, math.pi * 1.5])
+        drift_ax.set_ylabel("Drift Angle", fontsize=self.label_size)
+        drift_ax.tick_params(axis='y', labelsize=self.tick_size)
+        drift_ax.tick_params(axis='x', labelsize=self.tick_size)
+        drift_ax.set_xlabel("Cycle", fontsize=self.label_size)
+
+        lock_ax = drift_ax.twinx()
+        lock_ax.plot(lock, linestyle = '--', color = 'red')
+        lock_ax.set_yticks([0, 1], labels = ["No Lock", "Lock"])
+        lock_ax.tick_params(axis='y', labelsize=self.tick_size)
+
+        lock_ax.set_ylim([-0.1, 1.1])
+        plt.show()
+
     def plot_multiple(self, data, title, xaxis = "", yaxis = "", names = []):
         fig, ax = plt.subplots()
         fig.suptitle(title, fontsize = 20)
@@ -304,6 +357,55 @@ class LuSEE_MEASURE:
         for key, val in self.comm.fft_sel.items():
             if (val == num):
                 return key
+
+    def to_radian(self, val):
+        """compute the radian angle equivalent of int value val in Microchip format"""
+        if (not isinstance(val, int)):
+            new = []
+            for i in val:
+                sign = i&0xC0000000
+                if (sign == 0x40000000):
+                    new.append(math.pi)
+                    continue
+                elif (sign == 0x80000000):
+                    new.append(-math.pi)
+                    continue
+                elif (sign == 0x00000000):
+                    sign = True
+                    working_val = 0
+                elif (sign == 0xC0000000):
+                    sign = False
+                    working_val = -1
+
+                for num,j in enumerate(range(29, -1, -1)):
+                    digit_mask = 1 << j
+                    masked_val = (i & digit_mask) >> j
+                    if (masked_val):
+                        working_val += masked_val/(2**(num+1))
+                new.append(working_val * math.pi)
+            return new
+        else:
+            sign = val&0xC0000000
+            if (sign == 0x40000000):
+                new.append(1)
+            elif (sign == 0x80000000):
+                new.append(-1)
+            elif (sign == 0x00000000):
+                sign = True
+                working_val = 0
+            elif (sign == 0xC0000000):
+                sign = False
+                working_val = -1
+
+            for num,j in enumerate(range(29, -1, -1)):
+                digit_mask = 1 << j
+                masked_val = (val & digit_mask) >> j
+                if (masked_val):
+                    if (sign):
+                        working_val += masked_val/(2**(num+1))
+                    else:
+                        working_val -= masked_val/(2**(num+1))
+            return working_val * math.pi
 
     def twos_comp(self, val, bits):
         """compute the 2's complement of int value val"""
@@ -328,7 +430,7 @@ class LuSEE_MEASURE:
     def get_calibrator_data(self, setup = False):
         notch_ave = 6
         Nac1 = 2
-        Nac2 = 4
+        Nac2 = 10
         if (setup):
             self.comm.setup_calibrator(Nac1 = Nac1,
                                     Nac2 = Nac2,
@@ -377,16 +479,16 @@ class LuSEE_MEASURE:
             print(f"{all_names[num]}-----")
             print(i)
 
-        names = ["Fout1_Real", "Fout1_Imag", "Fout2_Real", "Fout2_Imag", "Fout3_Real", "Fout3_Imag", "Fout4_Real", "Fout4_Imag"]
-        for num,i in enumerate(range(0, 8, 1)):
-            self.plot_fft(self.twos_comp(x[i], 32), f"{self.test_name}_{names[num]}")
+        #names = ["Fout1_Real", "Fout1_Imag", "Fout2_Real", "Fout2_Imag", "Fout3_Real", "Fout3_Imag", "Fout4_Real", "Fout4_Imag"]
+        #for num,i in enumerate(range(0, 8, 1)):
+            #self.plot_fft(self.twos_comp(x[i], 32), f"{self.test_name}_{names[num]}")
 
-        self.plot(x[8], "Lock", "Cycles", "Value")
-        self.plot(self.twos_comp(x[9], 32), "Drift", "Cycles", "Value")
+        self.plot_lock_power(x[8])
+        self.plot_drift(x[8], self.to_radian(x[9]))
 
         names = ["Top1", "Top2", "Top3", "Top4", "Bot1", "Bot2", "Bot3", "Bot4"]
         for num,i in enumerate(range(10, 18, 1)):
-            self.plot(self.twos_comp([i], 32), f"{self.test_name}_{names[num]}", "Cycles", "Value")
+            self.plot(self.twos_comp(x[i], 32), f"{self.test_name}_{names[num]}", "Cycles", "Value")
         self.plot_multiple(x[10:18], "All power signals", "Cycles", "Value", names)
 
         names = ["FD1", "FD2", "FD3", "FD4", "SD1", "SD2", "SD3", "SD4", "FDX", "SDX"]
@@ -438,8 +540,8 @@ if __name__ == "__main__":
     #print(measure.comm.read_sys_timestamp())
     x = measure.get_adc1_data()
     print(f"Length of ADC1 data is {len(x)}")
-    measure.plot(measure.twos_comp(x, 14), "ADC1", "ADC ticks", "ADC counts")
-    measure.plot_adc_overlay(measure.twos_comp(x, 14), "ADC1")
+    #measure.plot(measure.twos_comp(x, 14), "ADC1", "ADC ticks", "ADC counts")
+    #measure.plot_adc_overlay(measure.twos_comp(x, 14), "ADC1")
     measure.get_pfb_data()
     #measure.get_pfb_data_all_fpga()
     measure.get_calibrator_data(setup = True)

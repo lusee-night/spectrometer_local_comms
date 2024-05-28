@@ -631,7 +631,7 @@ class LuSEE_COMMS:
 
         all_data = []
         #Wait for averaging
-        wait_time = self.cycle_time * (2**self.avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.3
+        wait_time = self.cycle_time * (2**self.avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg}, {self.Nac1_val}, {self.Nac2_val} averages")
         time.sleep(wait_time)
