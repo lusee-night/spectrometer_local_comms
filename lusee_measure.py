@@ -4,6 +4,7 @@ import os
 import time
 import sys
 import math
+import json
 
 from lusee_comm import LuSEE_COMMS
 
@@ -359,69 +360,70 @@ class LuSEE_MEASURE:
                 return key
 
     def to_radian(self, val):
+        if (val > 1 or val < -1):
+            sys.exit(f"lusee_measure --> Must supply radian values between -1 and 1. You supplied {val}")
+        sign = True if val >= 0 else False
+        if (sign):
+            working_val = 0
+            for num,i in enumerate(range(30, -1, -1)):
+                digit_val = 1/(2**num)
+                if (digit_val <= val):
+                    working_val |= 1 << i
+                    val -= digit_val
+        else:
+            working_val = 0xC0000000
+            val += 1
+            for num,i in enumerate(range(29, -1, -1)):
+                digit_val = 1/(2**(num+1))
+                if (digit_val <= val):
+                    working_val |= 1 << i
+                    val -= digit_val
+        return working_val
+
+    def convert_from_radian(self, val):
+        sign = val&0xC0000000
+        if (sign == 0x40000000):
+            return math.pi
+        elif (sign == 0x80000000):
+            return -1 * math.pi
+        elif (sign == 0x00000000):
+            sign = True
+            working_val = 0
+        elif (sign == 0xC0000000):
+            sign = False
+            working_val = -1
+
+        for num,j in enumerate(range(29, -1, -1)):
+            digit_mask = 1 << j
+            masked_val = (val & digit_mask) >> j
+            if (masked_val):
+                working_val += masked_val/(2**(num+1))
+        return working_val * math.pi
+
+    def from_radian(self, val):
         """compute the radian angle equivalent of int value val in Microchip format"""
         if (not isinstance(val, int)):
             new = []
             for i in val:
-                sign = i&0xC0000000
-                if (sign == 0x40000000):
-                    new.append(math.pi)
-                    continue
-                elif (sign == 0x80000000):
-                    new.append(-math.pi)
-                    continue
-                elif (sign == 0x00000000):
-                    sign = True
-                    working_val = 0
-                elif (sign == 0xC0000000):
-                    sign = False
-                    working_val = -1
-
-                for num,j in enumerate(range(29, -1, -1)):
-                    digit_mask = 1 << j
-                    masked_val = (i & digit_mask) >> j
-                    if (masked_val):
-                        working_val += masked_val/(2**(num+1))
-                new.append(working_val * math.pi)
+                new.append(self.convert_from_radian(i))
             return new
         else:
-            sign = val&0xC0000000
-            if (sign == 0x40000000):
-                new.append(1)
-            elif (sign == 0x80000000):
-                new.append(-1)
-            elif (sign == 0x00000000):
-                sign = True
-                working_val = 0
-            elif (sign == 0xC0000000):
-                sign = False
-                working_val = -1
+            return self.convert_from_radian(val)
 
-            for num,j in enumerate(range(29, -1, -1)):
-                digit_mask = 1 << j
-                masked_val = (val & digit_mask) >> j
-                if (masked_val):
-                    if (sign):
-                        working_val += masked_val/(2**(num+1))
-                    else:
-                        working_val -= masked_val/(2**(num+1))
-            return working_val * math.pi
+    def convert_twos_comp(self, val, bits):
+        if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
+            val = val - (1 << bits)        # compute negative value
+        return val
 
     def twos_comp(self, val, bits):
         """compute the 2's complement of int value val"""
         if (not isinstance(val, int)):
             new = []
             for i in val:
-                if (i & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
-                    twos = i - (1 << bits)        # compute negative value
-                    new.append(twos)
-                else:
-                    new.append(i)
+                new.append(self.convert_twos_comp(i, bits))
             return new
         else:
-            if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
-                val = val - (1 << bits)        # compute negative value
-            return val
+            return (self.convert_twos_comp(val, bits))
 
     def set_analog_mux(self, ch, in1, in2, gain):
         result = self.comm.set_chan_gain(ch, in1, in2, gain)
@@ -431,6 +433,8 @@ class LuSEE_MEASURE:
         notch_ave = 6
         Nac1 = 2
         Nac2 = 10
+        self.comm.connection.write_reg(self.comm.Nac1, Nac1)
+        self.comm.connection.write_reg(self.comm.Nac2, Nac2)
         if (setup):
             self.comm.setup_calibrator(Nac1 = Nac1,
                                     Nac2 = Nac2,
@@ -438,12 +442,12 @@ class LuSEE_MEASURE:
                                     cplx_index = 29,
                                     sum1_index = 32,
                                     sum2_index = 36,
-                                    powertop_index = 8,
-                                    powerbot_index = 32,
+                                    powertop_index = 16,
+                                    powerbot_index = 16,
                                     driftFD_index = 32,
                                     driftSD1_index = 26,
                                     driftSD2_index = 2,
-                                    default_drift = 0x6487C088,
+                                    default_drift = 0x00000000,
                                     have_lock_value = 0x0002A2A,
                                     have_lock_radian = 0x00000D6C,
                                     lower_guard_value = 0xFFFEBDE1,
@@ -470,6 +474,9 @@ class LuSEE_MEASURE:
         errors = 0
         self.comm.readout_mode("sw")
         x = self.comm.get_calib_data_sw(header = False, avg = notch_ave, Nac1 = Nac1, Nac2 = Nac2, test = False)
+        with open(f"{self.test_name}.json", 'w') as jsonfile:
+            json.dump(x, jsonfile, indent=4)
+
         y = []
         for i in x:
             y.append([hex(j) for j in i])
@@ -484,7 +491,7 @@ class LuSEE_MEASURE:
             #self.plot_fft(self.twos_comp(x[i], 32), f"{self.test_name}_{names[num]}")
 
         self.plot_lock_power(x[8])
-        self.plot_drift(x[8], self.to_radian(x[9]))
+        self.plot_drift(x[8], self.from_radian(x[9]))
 
         names = ["Top1", "Top2", "Top3", "Top4", "Bot1", "Bot2", "Bot3", "Bot4"]
         for num,i in enumerate(range(10, 18, 1)):
@@ -533,6 +540,8 @@ if __name__ == "__main__":
     measure.set_analog_mux(1, 1, 4, 2)
     measure.set_analog_mux(2, 2, 4, 2)
     measure.set_analog_mux(3, 3, 4, 2)
+    rad_test = -0.0000768
+    print(f"Radian version of {rad_test} is {hex(measure.to_radian(rad_test))}")
 
     print(f"Firmware version is {measure.comm.get_firmware_version()}")
     measure.comm.connection.write_reg(0x838, 1)
@@ -540,8 +549,8 @@ if __name__ == "__main__":
     #print(measure.comm.read_sys_timestamp())
     x = measure.get_adc1_data()
     print(f"Length of ADC1 data is {len(x)}")
-    #measure.plot(measure.twos_comp(x, 14), "ADC1", "ADC ticks", "ADC counts")
-    #measure.plot_adc_overlay(measure.twos_comp(x, 14), "ADC1")
+    measure.plot(measure.twos_comp(x, 14), "ADC1", "ADC ticks", "ADC counts")
+    measure.plot_adc_overlay(measure.twos_comp(x, 14), "ADC1")
     measure.get_pfb_data()
     #measure.get_pfb_data_all_fpga()
     measure.get_calibrator_data(setup = True)
