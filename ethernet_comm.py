@@ -7,7 +7,7 @@ import binascii
 
 class LuSEE_ETHERNET:
     def __init__(self):
-        self.version = 1.14
+        self.version = 1.15
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -103,7 +103,7 @@ class LuSEE_ETHERNET:
             time.sleep(self.wait_time)
             self.toggle_cdi_latch()
 
-            time.sleep(self.wait_time)
+            time.sleep(self.wait_time * 10) #Some registers need a longer wait before reading back for some reason
             readback = self.read_reg(reg)
             if (readback == data):
                 break
@@ -208,7 +208,6 @@ class LuSEE_ETHERNET:
 
     def start(self):
         self.write_reg(self.start_tlm_data, 1)
-        time.sleep(self.wait_time * 5)
         self.write_reg(self.start_tlm_data, 0)
 
     def request_sw_packet(self):

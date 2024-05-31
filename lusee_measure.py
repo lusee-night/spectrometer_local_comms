@@ -1,17 +1,18 @@
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import os
 import time
 import sys
 import math
 import json
+from datetime import datetime
 
 from lusee_comm import LuSEE_COMMS
+from lusee_plotting import LuSEE_PLOTTING
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.10
+        self.version = 1.11
         self.comm = LuSEE_COMMS()
+        self.prefix = "LuSEE Measure --> "
         self.tick_size = 22
         self.title_size = 32
         self.subtitle_size = 28
@@ -25,45 +26,12 @@ class LuSEE_MEASURE:
         self.comm.write_adc(0, 0x2B, 0x04) #Enable ramp for channel B on ADC0
         self.comm.write_adc(1, 0x2B, 0x04) #Enable ramp for channel B on ADC1
 
-    def get_adc1_data(self):
+    def get_adc_data(self, adc, header):
         self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
-        self.comm.set_function("ADC1")
-        data = self.comm.get_adc_data(header = False)
-        return data
-
-    def get_adc2_data(self):
-        self.comm.readout_mode("fpga")
-        self.comm.reset_all_fifos()
-        self.comm.load_adc_fifos()
-        self.comm.set_function("ADC2")
-        data = self.comm.get_adc_data(header = False)
-        return data
-
-    def get_adc3_data(self):
-        self.comm.readout_mode("fpga")
-        self.comm.reset_all_fifos()
-        self.comm.load_adc_fifos()
-        self.comm.set_function("ADC3")
-        data = self.comm.get_adc_data(header = False)
-        return data
-
-    def get_adc4_data(self):
-        self.comm.readout_mode("fpga")
-        self.comm.reset_all_fifos()
-        self.comm.load_adc_fifos()
-        self.comm.set_function("ADC4")
-        data = self.comm.get_adc_data(header = False)
-        return data
-
-    def get_adc2_header_data(self):
-        self.comm.readout_mode("fpga")
-        self.comm.reset_all_fifos()
-        self.comm.load_adc_fifos()
-        self.comm.set_function("ADC2")
-        data, header = self.comm.get_adc_data(header = True)
-        return data, header
+        self.comm.set_function(f"ADC{adc}")
+        return self.comm.get_adc_data(header = header)
 
     def get_adcs_sync(self):
         self.comm.readout_mode("fpga")
@@ -88,6 +56,10 @@ class LuSEE_MEASURE:
         return data, header
 
     def get_pfb_data(self):
+        #0 is red pcb
+        #1 is green pcb
+        self.comm.set_pcb(1)
+
         #We will read from fpga output
         self.comm.readout_mode("fpga")
         #Need to set these
@@ -432,10 +404,11 @@ class LuSEE_MEASURE:
     def get_calibrator_data(self, setup = False):
         notch_ave = 6
         Nac1 = 2
-        Nac2 = 10
+        Nac2 = 4
         self.comm.connection.write_reg(self.comm.Nac1, Nac1)
         self.comm.connection.write_reg(self.comm.Nac2, Nac2)
         if (setup):
+            self.comm.connection.write_reg(0x840, 0)
             self.comm.setup_calibrator(Nac1 = Nac1,
                                     Nac2 = Nac2,
                                     notch_index = 0x2,
@@ -447,7 +420,7 @@ class LuSEE_MEASURE:
                                     driftFD_index = 32,
                                     driftSD1_index = 26,
                                     driftSD2_index = 2,
-                                    default_drift = 0x00000000,
+                                    default_drift = 0x00000069,
                                     have_lock_value = 0x0002A2A,
                                     have_lock_radian = 0x00000D6C,
                                     lower_guard_value = 0xFFFEBDE1,
@@ -505,11 +478,144 @@ class LuSEE_MEASURE:
             fdsd.append(self.twos_comp(x[i], 32))
         self.plot_multiple(fdsd, "All FD-SD signals", "Cycles", "Value", names)
 
+    def calibrator_test(self):
+        self.setup()
+        self.setup_calibrator()
+
+    def spectrometer_simple(self):
+        self.setup()
+        for i in range(1, 5):
+            if (self.json_data[f"adc{i}_save_data"]):
+                data, header = self.get_adc_data(i, True)
+                adc_dict = {"header": header,
+                            "data": data}
+                with open(os.path.join(self.results_path, f"adc{i}_output.json"), 'w', encoding='utf-8') as f:
+                    json.dump(adc_dict, f, ensure_ascii=False, indent=4, default=str)
+
+                if (self.json_data[f"adc{i}_plot"]):
+                    self.plotter.plot_adc(i, self.json_data[f"adc{i}_plot_show"], self.json_data[f"adc{i}_plot_save"])
+
+        self.setup_pfb()
+        self.comm.readout_mode("fpga")
+        for i in range(1, 5):
+            if (self.json_data[f"pfb{i}_fpga_save_data"]):
+                self.comm.set_function(f"FFT{i}")
+                data, header = self.comm.get_pfb_data(header = True)
+                pfb_dict = {"header": header,
+                            "data": data}
+                with open(os.path.join(self.results_path, f"pfb_fpga{i}_output.json"), 'w', encoding='utf-8') as f:
+                    json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
+
+                if (self.json_data[f"pfb{i}_fpga_plot"]):
+                    self.plotter.plot_pfb_fpga(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
+
+        if (self.json_data[f"pfb_sw_save_data"]):
+            self.comm.readout_mode("sw")
+            all_data, all_headers = self.comm.get_pfb_data_sw(header_return = True)
+
+            pfb_dict = {"header": all_headers,
+                        "data": all_data}
+            with open(os.path.join(self.results_path, f"pfb_sw_output.json"), 'w', encoding='utf-8') as f:
+                json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
+
+            if (self.json_data[f"pfb_sw_plot"]):
+                self.plotter.plot_pfb_sw(self.json_data[f"pfb_sw_plot_show"], self.json_data[f"pfb_sw_plot_save"])
+    def setup(self):
+        if (self.json_data["reset"]):
+            self.comm.reset()
+            self.comm.reset_adc(adc0 = True, adc1 = True)
+
+        if (self.json_data["pcb"] == "red"):
+            self.comm.set_pcb(0)
+        elif (self.json_data["pcb"] == "green"):
+            self.comm.set_pcb(0)
+        else:
+            pcb = self.json_data["pcb"]
+            sys.exit(f"{self.prefix}Error, pcb model designated as {pcb}")
+
+        self.set_analog_mux(0, self.json_data["mux1_in1"], self.json_data["mux1_in2"], self.json_data["mux1_gain"])
+        self.set_analog_mux(1, self.json_data["mux2_in1"], self.json_data["mux2_in2"], self.json_data["mux2_gain"])
+        self.set_analog_mux(2, self.json_data["mux3_in1"], self.json_data["mux3_in2"], self.json_data["mux3_gain"])
+        self.set_analog_mux(3, self.json_data["mux4_in1"], self.json_data["mux4_in2"], self.json_data["mux4_gain"])
+
+    def setup_pfb(self):
+        avgs = self.json_data["pfb_averages"]
+        self.comm.set_main_average(avgs)
+        self.comm.set_notch_filter(self.json_data["notch_filter"])
+        self.comm.set_notch_average(self.json_data["notch_averages"])
+        self.comm.set_sticky_error(self.json_data["sticky_errors"])
+        self.comm.spectrometer_test_mode(self.json_data["pfb_test_mode"])
+
+        for i in range(1, 17):
+            main_index = int(self.json_data[f"pfb{i}_main_index"], 16)
+            notch_index = int(self.json_data[f"pfb{i}_notch_index"], 16)
+            self.comm.set_index_array(i-1, main_index, "main")
+            self.comm.set_index_array(i-1, notch_index, "notch")
+
+        self.comm.reset_all_fifos()
+        self.comm.load_fft_fifos()
+        self.comm.start_spectrometer()
+
+        wait_time = self.comm.cycle_time * (2**avgs)
+        if (wait_time > 1.0):
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
+
+    def setup_calibrator(self):
+        pass
+
+    def start_test(self, config_file):
+        print(f"{self.prefix}Initializing Test")
+        with open(config_file, "r") as jsonfile:
+            self.json_data = json.load(jsonfile)
+
+        #The datastore is the eventual output JSON file that will be written after the test
+        #Want to also include what the inputs for this particular test was
+        self.datastore = {}
+        self.datastore['input_params'] = self.json_data
+        self.start_time = datetime.now()
+        self.datastore['start_time'] = self.start_time
+        self.datastore.update(self.comm.get_firmware_version())
+
+        if (self.json_data["relative"] == True):
+            output_path = os.path.abspath(self.json_data["output_directory"])
+        else:
+            output_path = os.path.normpath(self.json_data["output_directory"])
+
+        json_date = datetime.today().strftime('%Y%m%d%H%M%S')
+        os.makedirs(os.path.join(output_path, json_date))
+        self.results_path = os.path.join(output_path, json_date)
+        self.json_output_file = os.path.join(self.results_path, f"output.json")
+        self.datastore['json_path'] = self.json_output_file
+
+        with open(self.json_output_file, 'w', encoding='utf-8') as f:
+            json.dump(self.datastore, f, ensure_ascii=False, indent=4, default=str)
+
+        self.plotter = LuSEE_PLOTTING(self.results_path)
+
+        test = self.json_data["test"]
+
+        if (test == "spectrometer_simple"):
+            self.spectrometer_simple()
+        elif (test == "calibrator"):
+            self.calibrator_test()
+        else:
+            sys.exit(f"{self.prefix}Incorrect test supplied, {test} is not valid.")
+
+        end_time = datetime.now()
+        test_time = end_time - self.start_time
+        self.datastore['end_time'] = end_time
+        self.datastore['test_time'] = test_time
+
+        with open(self.json_output_file, 'w', encoding='utf-8') as f:
+            json.dump(self.datastore, f, ensure_ascii=False, indent=4, default=str)
+
+        print(f"{self.prefix}Test complete")
+
 if __name__ == "__main__":
     if (len(sys.argv) > 1):
         arg = sys.argv[1]
     else:
-        arg = None
+        sys.exit("You need to supply an argument")
     #time.sleep(10)
     measure = LuSEE_MEASURE()
     measure.comm.connection.write_cdi_reg(5, 69)
@@ -534,7 +640,15 @@ if __name__ == "__main__":
     if (arg == "adc"):
         measure.set_all_adc_ramp()
 
+    if len(sys.argv) < 2:
+        sys.exit(f"Error: You need to supply a config file for this test as the argument! You had {len(sys.argv)-1} arguments!")
+
+    measure.comm.connection.write_reg(0x838, 1)
+    measure.start_test(arg)
+
     measure.test_name = arg
+    measure.prepare_directory()
+    measure.spectrometer_data()
 
     measure.set_analog_mux(0, 0, 4, 2)
     measure.set_analog_mux(1, 1, 4, 2)

@@ -4,7 +4,7 @@ from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):
-        self.version = 1.10
+        self.version = 1.12
 
         self.connection = LuSEE_ETHERNET()
 
@@ -29,7 +29,6 @@ class LuSEE_COMMS:
         self.num_samples = 0x211
         self.data_src_sel = 0x212
         self.fifo_rst = 0x213
-        self.fft_select = 0x214
         self.tlm_details = 0x219
         self.cdi_src_sel = 0x21F
         self.df_enable = 0x220
@@ -123,25 +122,6 @@ class LuSEE_COMMS:
             "FFT2": 6,
             "FFT3": 7,
             "FFT4": 8
-            }
-
-        self.fft_sel = {
-            "A1": 0,
-            "A2": 1,
-            "A3": 2,
-            "A4": 3,
-            "X12R": 4,
-            "X12I": 5,
-            "X13R": 6,
-            "X13I": 7,
-            "X14R": 8,
-            "X14I": 9,
-            "X23R": 10,
-            "X23I": 11,
-            "X24R": 12,
-            "X24I": 13,
-            "X34R": 14,
-            "X34I": 15
             }
 
         self.ADC_PACKETS = 9
@@ -268,12 +248,12 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.num_samples, int(num))
 
     def reset_all_fifos(self):
-        print("Python Debugging --> Resetting FIFO")
+        #print("Python Debugging --> Resetting FIFO")
         self.connection.write_reg(self.fifo_rst, 1)
         time.sleep(self.wait_time)
         self.connection.write_reg(self.fifo_rst, 0)
         time.sleep(self.wait_time)
-        print("Python Debugging --> FIFO reset complete")
+        #print("Python Debugging --> FIFO reset complete")
 
     def load_adc_fifos(self):
         old_val = self.connection.read_reg(self.load_data)
@@ -316,16 +296,6 @@ class LuSEE_COMMS:
         else:
             self.connection.write_reg(self.test_mode, 0)
 
-    def select_fft(self, fft_style):
-        try:
-            val = self.fft_sel[fft_style]
-        except KeyError:
-            print(f"Python LuSEE Comm --> You need to use an FFT choice listed in {self.fft_sel}")
-            print(f"You inputted {fft_style}")
-            return
-
-        self.connection.write_reg(self.fft_select, val)
-
     def set_main_average(self, avg):
         avg_num = int(avg)
         self.avg = avg_num
@@ -335,11 +305,11 @@ class LuSEE_COMMS:
         avg_num = int(avg)
         self.connection.write_reg(self.notch_average, avg_num)
 
-    def notch_filter_on(self):
-        self.connection.write_reg(self.notch_reg, 1)
-
-    def notch_filter_off(self):
-        self.connection.write_reg(self.notch_reg, 0)
+    def set_notch_filter(self, val):
+        if (val):
+            self.connection.write_reg(self.notch_reg, 1)
+        else:
+            self.connection.write_reg(self.notch_reg, 0)
 
     def set_adc_threshold(self, adc_min, adc_max):
         self.connection.write_reg(self.adc_min_threshold, int(adc_min))
@@ -352,18 +322,11 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.cal_error_stick, int(sticky))
 
     def set_all_index(self, val):
-        for key in self.fft_sel:
+        for pfb in range(16):
             self.set_index_array(key, val, "main")
             self.set_index_array(key, val, "notch")
 
-    def set_index_array(self, fft, val, index_type):
-        try:
-            fft_num = self.fft_sel[fft]
-        except KeyError:
-            print(f"Python LuSEE Comm --> You need to use an FFT choice listed in {self.fft_sel}")
-            print(f"You inputted {fft}")
-            return
-
+    def set_index_array(self, fft_num, val, index_type):
         #Lets this function be reused for the main index and the correlator index, they just have different registers
         if (index_type == "main"):
             array1 = self.corr_array1
@@ -475,44 +438,27 @@ class LuSEE_COMMS:
         return add_value
 
     def get_data(self, data_type, num, header=False):
-        i = 0
-        while (i < self.tries):
-            if (header):
-                data, header = self.connection.get_data_packets(data_type=data_type, num=num, header=header)
-                if (data[0] != []):
-                    return data, header
-                else:
-                    print("LuSEE COMM --> No packet response, retrying...")
-                    i += 1
-            else:
-                data = self.connection.get_data_packets(data_type=data_type, num=num, header=header)
-                if (data != []):
-                    return data
-                else:
-                    print("LuSEE COMM --> No packet response, retrying...")
-                    i += 1
+        return self.connection.get_data_packets(data_type=data_type, num=num, header=header)
 
     def get_adc_data(self, header=False):
-        data = self.get_data(data_type = "adc", num=self.ADC_PACKETS, header = header)
-        return data
+        return self.get_data(data_type = "adc", num=self.ADC_PACKETS, header = header)
 
     def get_counter_data(self, header=False):
         if (self.counter_num == None):
             print("LuSEE COMM --> You need to set the counter number before reading out the counter FIFO!")
             return
         packets = (self.counter_num // self.bytes_per_packet) + 1
-        data = self.get_data(data_type = "adc", num=packets, header = header)
-        return data
+        return self.get_data(data_type = "adc", num=packets, header = header)
 
-    def get_pfb_data(self, header=False):
-        wait_time = self.cycle_time * (2**self.avg)
-        if (wait_time > 1.0):
-            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+    def get_pfb_data(self, header=False, wait=True):
+        if wait:
+            wait_time = self.cycle_time * (2**self.avg)
+            if (wait_time > 1.0):
+                print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
-        data = self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
-        return data
+        return self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
 
-    def get_pfb_data_sw(self, header = False, avg = None, test = False):
+    def get_pfb_data_sw(self, header_return = False, avg = None, test = False):
         if (avg != None):
             self.avg = avg
         #Put Python in control of readout
@@ -532,6 +478,7 @@ class LuSEE_COMMS:
         else:
             self.connection.write_reg(self.df_enable, 1)
         all_data = []
+        all_header = []
         #Wait for averaging
         wait_time = self.cycle_time * (2**self.avg)
         if (wait_time > 1.0):
@@ -601,7 +548,11 @@ class LuSEE_COMMS:
                 #Clear the acknowledge flag to tell microcontroller to check our response
                 self.connection.write_reg(self.client_ack, 0)
             all_data.append(data)
-        return all_data
+            all_header.append(header)
+        if (header_return):
+            return all_data, all_header
+        else:
+            return all_data
 
     def get_calib_data_sw(self, header = False, avg = None, Nac1 = None, Nac2 = None, test = False):
         if (avg != None):
