@@ -7,7 +7,7 @@
 "relative": true,
 
 "reset": false,
-"pcb": "red",
+"pcb": "green",
 
 "mux1_in1": 0,
 "mux1_in2": 4,

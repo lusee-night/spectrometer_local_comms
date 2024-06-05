@@ -479,8 +479,37 @@ class LuSEE_MEASURE:
         self.plot_multiple(fdsd, "All FD-SD signals", "Cycles", "Value", names)
 
     def calibrator_test(self):
-        self.setup()
+        if (self.json_data[f"pretest"]):
+            self.spectrometer_simple()
+        else:
+            self.setup()
+            self.setup_pfb()
+
         self.setup_calibrator()
+
+        self.comm.readout_mode("sw")
+        all_data,all_headers = self.comm.get_calib_data_sw(
+            header_return = True, avg = self.json_data["pfb_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False
+            )
+        calib_dict = {"header": all_headers,
+                        "data": all_data}
+        with open(os.path.join(self.results_path, f"calib_output.json"), 'w', encoding='utf-8') as f:
+            json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
+
+        if (self.json_data[f"print_calib"]):
+            self.plotter.print_calib()
+
+        if (self.json_data[f"calib_fout_plot"]):
+            self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
+
+        if (self.json_data[f"calib_drift_plot"]):
+            self.plotter.plot_lock_drift(self.json_data[f"calib_drift_plot_show"], self.json_data[f"calib_drift_plot_save"])
+
+        if (self.json_data[f"calib_topbottom_plot"]):
+            self.plotter.plot_topbottom(self.json_data[f"calib_topbottom_plot_show"], self.json_data[f"calib_topbottom_plot_save"])
+
+        if (self.json_data[f"calib_fdsd_plot"]):
+            self.plotter.plot_fdsd(self.json_data[f"calib_fdsd_plot_show"], self.json_data[f"calib_fdsd_plot_save"])
 
     def spectrometer_simple(self):
         self.setup()
@@ -561,7 +590,51 @@ class LuSEE_MEASURE:
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
 
     def setup_calibrator(self):
-        pass
+        self.comm.connection.write_reg(0x813, 1)
+        self.comm.setup_calibrator(
+            Nac1 = self.json_data["Nac1"],
+            Nac2 = self.json_data["Nac2"],
+            notch_index = self.json_data["notch_index"],
+            cplx_index = self.json_data["cplx_index"],
+            sum1_index = self.json_data["sum1_index"],
+            sum2_index = self.json_data["sum2_index"],
+            powertop_index = self.json_data["powertop_index"],
+            powerbot_index = self.json_data["powerbot_index"],
+            driftFD_index = self.json_data["driftFD_index"],
+            driftSD1_index = self.json_data["driftSD1_index"],
+            driftSD2_index = self.json_data["driftSD2_index"],
+            default_drift = int(self.json_data["default_drift"], 16),
+            have_lock_value = int(self.json_data["have_lock_value"], 16),
+            have_lock_radian = int(self.json_data["have_lock_radian"], 16),
+            lower_guard_value = int(self.json_data["lower_guard_value"], 16),
+            upper_guard_value = int(self.json_data["upper_guard_value"], 16),
+            power_ratio = int(self.json_data["power_ratio"], 16),
+            antenna_enable = int(self.json_data["antenna_enable"], 16),
+            power_slice = int(self.json_data["power_slice"], 16),
+            fdsd_slice = int(self.json_data["fdsd_slice"], 16),
+            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16)
+            )
+        if (self.json_data["reset_cal"]):
+            self.calibrator_reset()
+        if (self.json_data["wait_to_start"]):
+            self.calibrator_wait()
+
+    def calibrator_reset(self):
+        self.comm.reset_calibrator()
+        self.comm.reset_calibrator_formatter()
+
+    def calibrator_wait(self):
+        self.comm.connection.write_reg(0x421, 0xFF)
+
+        self.calibrator_reset()
+        #self.connection.write_reg(0x838, 1)
+        #self.connection.write_reg(0x839, 1)
+        #self.connection.write_reg(0x83A, 1)
+        #self.connection.write_reg(0x83B, 1)
+        #self.connection.write_reg(0x83C, 1)
+        input("Ready?")
+        self.calibrator_reset()
+        self.comm.connection.write_reg(0x421, 0x0)
 
     def start_test(self, config_file):
         print(f"{self.prefix}Initializing Test")

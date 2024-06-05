@@ -22,6 +22,8 @@
 "mux4_in2": 4,
 "mux4_gain": 2,
 
+"pretest": false,
+
 "adc1_save_data": true,
 "adc1_plot": true,
 "adc1_plot_show": false,
@@ -42,7 +44,7 @@
 "adc4_plot_show": false,
 "adc4_plot_save": true,
 
-"pfb_averages": 10,
+"pfb_averages": 4,
 "notch_filter": true,
 "notch_averages": 4,
 "sticky_errors": true,
@@ -110,6 +112,7 @@
 "pfb_sw_plot_save": true,
 
 "reset_cal": true,
+"wait_to_start": false,
 "Nac1": 2,
 "Nac2": 4,
 "notch_index": 2,
@@ -130,6 +133,22 @@
 "antenna_enable": "0xF",
 "power_slice": "0x9",
 "fdsd_slice": "0x0",
-"fdxsdx_slice": "0xB"
+"fdxsdx_slice": "0xB",
 
+"print_calib": true,
+"calib_fout_plot": true,
+"calib_fout_plot_show": true,
+"calib_fout_plot_save": true,
+
+"calib_drift_plot": true,
+"calib_drift_plot_show": true,
+"calib_drift_plot_save": true,
+
+"calib_topbottom_plot": true,
+"calib_topbottom_plot_show": true,
+"calib_topbottom_plot_save": true,
+
+"calib_fdsd_plot": true,
+"calib_fdsd_plot_show": true,
+"calib_fdsd_plot_save": true
 }

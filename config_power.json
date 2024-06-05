@@ -2,7 +2,7 @@
 "schema": 1,
 "test": "spectrometer_simple",
 "output_directory": "power_benchmarking",
-"title": "no_ddr3",
+"title": "jack_test",
 "comment": "First Article (Rev B) Motherboard with Second Article FPGA Mezzanine. TMR is enabled. Running Jack's default microcontroller software for readout. DDR disabled. Dedicated +/-5.5V input for analog. All other inputs come from single 4V wire. ADC input for all 4 channels from R&S SMW200A - Rectangular wave at 20 MHz, amplitude is high, with low analog gain on motherboard.",
 "relative": true,
 

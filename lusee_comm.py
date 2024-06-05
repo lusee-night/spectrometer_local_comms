@@ -554,7 +554,7 @@ class LuSEE_COMMS:
         else:
             return all_data
 
-    def get_calib_data_sw(self, header = False, avg = None, Nac1 = None, Nac2 = None, test = False):
+    def get_calib_data_sw(self, header_return = False, avg = None, Nac1 = None, Nac2 = None, test = False):
         if (avg != None):
             self.avg = avg
         if (Nac1 != None):
@@ -581,6 +581,7 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.CF_Enable, 1)
 
         all_data = []
+        all_header = []
         #Wait for averaging
         wait_time = self.cycle_time * (2**self.avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
         if (wait_time > 1.0):
@@ -646,7 +647,11 @@ class LuSEE_COMMS:
                 self.connection.write_reg(self.client_ack, 0)
                 print(f"Recieved proper packet of {int(header[pkt]['ccsds_appid'], 16)}")
             all_data.append(data)
-        return all_data
+            all_header.append(header)
+        if (header_return):
+            return all_data, all_header
+        else:
+            return all_data
 
     def set_chan_gain(self, ch, in1, in2, gain):
         chs=[2,1,0,3,4,5,6,7]
@@ -703,20 +708,6 @@ class LuSEE_COMMS:
         self.connection.write_reg(0x83E, fdsd_slice)
         self.connection.write_reg(0x83F, fdxsdx_slice)
 
-        self.connection.write_reg(0x421, 0xFF)
-        self.connection.write_reg(0x813, 1)
-        self.reset_calibrator()
-        self.reset_calibrator_formatter()
-        #self.connection.write_reg(0x838, 1)
-        #self.connection.write_reg(0x839, 1)
-        #self.connection.write_reg(0x83A, 1)
-        #self.connection.write_reg(0x83B, 1)
-        #self.connection.write_reg(0x83C, 1)
-        input("Ready?")
-        self.reset_calibrator()
-        self.reset_calibrator_formatter()
-        self.connection.write_reg(0x421, 0x0)
-
     def get_adc_stats(self, num, high, low):
         self.connection.write_reg(self.adc_stat_clr, 1)
         self.connection.write_reg(self.adc_stat_samples, num)
@@ -753,4 +744,4 @@ if __name__ == "__main__":
     #     print(num)
     #     resp = ethernet.set_corr_array(i, 0x3F, 0x0)
 
-    print(ethernet.get_adc_stats(1000))
+    print(ethernet.get_adc_stats(0xFFFE, 0x3FFF, 0x0))
