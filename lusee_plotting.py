@@ -77,7 +77,7 @@ class LuSEE_PLOTTING:
             pfb_data = json.load(jsonfile)
 
         data = pfb_data["data"]
-        for i in range(1, 17):
+        for i in range(16):
             fig = self.plot_fft(data[i], f"FFT{i} through Microcontroller")
 
             if (show):

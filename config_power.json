@@ -1,26 +1,30 @@
 {
 "schema": 1,
 "test": "spectrometer_simple",
-"output_directory": "spectrometer_simple",
-"title": "Testing",
-"comment": "Testing Jack's red board that he rewords",
+"output_directory": "power_benchmarking",
+"title": "no_ddr3",
+"comment": "First Article (Rev B) Motherboard with Second Article FPGA Mezzanine. TMR is enabled. Running Jack's default microcontroller software for readout. DDR disabled. Dedicated +/-5.5V input for analog. All other inputs come from single 4V wire. ADC input for all 4 channels from R&S SMW200A - Rectangular wave at 20 MHz, amplitude is high, with low analog gain on motherboard.",
 "relative": true,
 
 "reset": false,
-"pcb": "red",
+"pcb": "green",
+
+"adc_num": "0xFFFE",
+"adc_high": "0x3FFF",
+"adc_low": "0x0",
 
 "mux1_in1": 0,
 "mux1_in2": 4,
-"mux1_gain": 2,
+"mux1_gain": 0,
 "mux2_in1": 1,
 "mux2_in2": 4,
-"mux2_gain": 2,
+"mux2_gain": 0,
 "mux3_in1": 2,
 "mux3_in2": 4,
-"mux3_gain": 2,
+"mux3_gain": 0,
 "mux4_in1": 3,
 "mux4_in2": 4,
-"mux4_gain": 2,
+"mux4_gain": 0,
 
 "adc1_save_data": true,
 "adc1_plot": true,
@@ -29,17 +33,17 @@
 
 "adc2_save_data": true,
 "adc2_plot": true,
-"adc2_plot_show": false,
+"adc2_plot_show": true,
 "adc2_plot_save": true,
 
 "adc3_save_data": true,
 "adc3_plot": true,
-"adc3_plot_show": false,
+"adc3_plot_show": true,
 "adc3_plot_save": true,
 
 "adc4_save_data": true,
 "adc4_plot": true,
-"adc4_plot_show": false,
+"adc4_plot_show": true,
 "adc4_plot_save": true,
 
 "pfb_averages": 10,
@@ -86,26 +90,26 @@
 
 "pfb1_fpga_save_data": true,
 "pfb1_fpga_plot": true,
-"pfb1_fpga_plot_show": false,
+"pfb1_fpga_plot_show": true,
 "pfb1_fpga_plot_save": true,
 
 "pfb2_fpga_save_data": true,
 "pfb2_fpga_plot": true,
-"pfb2_fpga_plot_show": false,
+"pfb2_fpga_plot_show": true,
 "pfb2_fpga_plot_save": true,
 
 "pfb3_fpga_save_data": true,
 "pfb3_fpga_plot": true,
-"pfb3_fpga_plot_show": false,
+"pfb3_fpga_plot_show": true,
 "pfb3_fpga_plot_save": true,
 
 "pfb4_fpga_save_data": true,
 "pfb4_fpga_plot": true,
-"pfb4_fpga_plot_show": false,
+"pfb4_fpga_plot_show": true,
 "pfb4_fpga_plot_save": true,
 
-"pfb_sw_save_data": true,
+"pfb_sw_save_data": false,
 "pfb_sw_plot": true,
-"pfb_sw_plot_show": false,
+"pfb_sw_plot_show": true,
 "pfb_sw_plot_save": true
 }

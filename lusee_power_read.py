@@ -2,18 +2,18 @@ import time
 import datetime
 import sys
 import pandas as pd
+import json
 
 from lusee_hk_eric import LuSEE_HK
 from lusee_comm import LuSEE_COMMS
 from lusee_measure import LuSEE_MEASURE
 
 class LuSEE_POWER:
-    def __init__(self, name):
+    def __init__(self):
         self.version = 1.01
         self.hk = LuSEE_HK()
         self.measure = LuSEE_MEASURE()
         self.comm = LuSEE_COMMS()
-        self.name = name
         
         #Input voltages on cable, used for LDO power consumption
         self.cable_5p  = 5.5
@@ -136,19 +136,25 @@ class LuSEE_POWER:
 
         #Adds the rest of that first colums with all these indicators for the rows
         self.initial_df.extend(key_list_pwr)
-        self.df = pd.DataFrame(self.initial_df, columns=[f"{self.name}"])
+
 
         self.power_rails = {
-            "I5_5P [A]": 0,
-            "I5_5N [A]": 0,
-            "I3_6P [A]": 0,
-            "I2_3P [A]": 0,
-            "I1_5P [A]": 0
+            "I5_5P [A]": [5.5,0],
+            "I5_5N [A]": [5.5,0],
+            "I3_6P [A]": [3.6,0],
+            "I2_3P [A]": [2.3,0],
+            "I1_5P [A]": [1.5,0]
             }
         self.test_info = {}
         self.settings_info = {}
 
-    def sequence(self, description):
+    def sequence(self, config_file):
+        with open(config_file, "r") as jsonfile:
+            self.json_data = json.load(jsonfile)
+
+        self.name = self.json_data['title']
+        self.df = pd.DataFrame(self.initial_df, columns=[f"{self.name}"])
+
         start = datetime.datetime.now()
         self.test_info['Test Datetime Start'] = start.strftime("%B %d, %Y %I:%M:%S %p")
         self.test_info['Test Datetime End'] = None
@@ -158,25 +164,20 @@ class LuSEE_POWER:
         self.test_info['Firmware Version'] = firmware['version']
         self.test_info['Firmware ID'] = firmware['id']
         self.test_info['Firmware Compilation Datetime'] = firmware['formatted_datetime']
-        self.test_info['User Description'] = description
+        self.test_info['User Description'] = self.json_data['comment']
 
-        self.measure.set_analog_mux(0, 0, 4, 0)
-        self.measure.set_analog_mux(1, 1, 4, 0)
-        self.measure.set_analog_mux(2, 2, 4, 0)
-        self.measure.set_analog_mux(3, 3, 4, 0)
+        self.comm.connection.write_reg(0x100, 6)
+        self.measure.start_test(config_file)
 
-        #print(self.comm.get_adc_stats(0xFFFF))
-        #x = self.measure.get_adc1_data()
-        #self.measure.plot(self.measure.twos_comp(x, 14), "ADC1")
-        #x = self.measure.get_adc2_data()
-        #self.measure.plot(self.measure.twos_comp(x, 14), "ADC2")
-        #x = self.measure.get_adc3_data()
-        #self.measure.plot(self.measure.twos_comp(x, 14), "ADC3")
-        #x = self.measure.get_adc4_data()
-        #self.measure.plot(self.measure.twos_comp(x, 14), "ADC4")
+        num = int(self.json_data['adc_num'], 16)
+        high = int(self.json_data['adc_high'], 16)
+        low = int(self.json_data['adc_low'], 16)
 
-        #self.measure.get_calibrator_data()
-        #self.measure.get_pfb_data_sw()
+        adc_stats = {"HIGH_THRESHOLD": high,
+                     "LOW_THRESHOLD": low}
+        stats = self.comm.get_adc_stats(num = num, high = high, low = low)
+        print(stats)
+        adc_stats.update(stats)
 
         self.settings_info['Register 0x100'] = hex(comm.connection.read_reg(comm.uC_reset))
         self.settings_info['Register 0x101'] = hex(comm.connection.read_reg(comm.DDR_reg))
@@ -184,7 +185,6 @@ class LuSEE_POWER:
         self.settings_info['ADC1 gain and config (Register 0x501)'] = hex(comm.connection.read_reg(comm.mux1_reg))
         self.settings_info['ADC2 gain and config (Register 0x502)'] = hex(comm.connection.read_reg(comm.mux2_reg))
         self.settings_info['ADC3 gain and config (Register 0x503)'] = hex(comm.connection.read_reg(comm.mux3_reg))
-        self.settings_info['ADC Stats'] = "Work in progress, will show min and max ADC settings to demonstrate dynamic range of input signal"
         self.settings_info['Spectrometer Enabled'] = hex(comm.connection.read_reg(comm.enable_spe))
         self.settings_info['Spectrometer Averages'] = 2 ** comm.connection.read_reg(comm.main_average)
         self.settings_info['Notch Filter Enabled'] = hex(comm.connection.read_reg(comm.notch_reg))
@@ -227,7 +227,7 @@ class LuSEE_POWER:
         all_indexes.append("Measurements")
 
         for key,val in self.power_rails.items():
-            self.power_rails[key] = round(val, 3)
+            self.power_rails[key][1] = round(val[1], 3)
 
         #print(all_indexes)
 
@@ -283,11 +283,20 @@ class LuSEE_POWER:
         minutes, seconds = divmod(total_seconds, 60)
         self.test_info['Test Duration'] = f"{minutes:02d} minutes, {seconds:02d} seconds"
 
-        additional_descriptions = list(self.power_rails.keys()) + [''] + list(self.test_info.keys()) + [''] + list(self.settings_info.keys())
-        additional_data = list(self.power_rails.values()) + [''] + list(self.test_info.values()) + [''] + list(self.settings_info.values())
+        additional_descriptions = list(self.power_rails.keys()) + [''] + list(self.test_info.keys()) + [''] + list(self.settings_info.keys()) + list(adc_stats.keys())
+        power_rail_data = self.power_rails.values()
+        power_rail_amps = []
+        power_rail_power = []
+        for i in power_rail_data:
+            power_rail_amps.append(i[1])
+            power_rail_power.append(i[0]*i[1])
+        additional_data = power_rail_amps + [''] + list(self.test_info.values()) + [''] + list(self.settings_info.values()) + list(adc_stats.values())
+        power_data = power_rail_power + [sum(power_rail_power)]
 
-        self.df['Extra Parameters'] = pd.Series(additional_descriptions)
+        new_series = pd.Series(additional_descriptions, name='Extra Parameters')
+        self.df = self.df.reindex(index = new_series.index).assign(C=new_series)
         self.df['Extra Data'] = pd.Series(additional_data)
+        self.df['Power'] = pd.Series(power_data)
 
         #Create a pandas.ExcelWriter object
         writer = pd.ExcelWriter(f"{self.name}.xlsx", engine='xlsxwriter')
@@ -302,8 +311,9 @@ class LuSEE_POWER:
         worksheet = writer.sheets['LuSEE_Power_Measurement']
         #Adjust the column widths based on the content
         for i, col in enumerate(self.df.columns):
-            width = max(self.df[col].apply(lambda x: len(str(x))).max(), len(col))
-            worksheet.set_column(i, i, width, left_align_format)
+            if (col != "Extra Data"): #This column gets very wide with the comment field
+                width = max(self.df[col].apply(lambda x: len(str(x))).max(), len(col))
+                worksheet.set_column(i, i, width, left_align_format)
 
         #Save the Excel file
         writer._save()
@@ -353,21 +363,23 @@ class LuSEE_POWER:
             #Use absolute value with prev_adc0 because it could be negative for the -5.5V branch
             if "Current" in key:
                 adc0, adc4 = self.hk.convert_current(resistance = self.resistors[key], val1 = adc0, val2 = adc4)
+                if (abs(prev_adc0) < 0.1):
+                    adc0 = 0
                 p = round(adc0 * abs(prev_adc0), 3)
                 cable_voltage = self.get_cable_voltage(branch = key)
                 print(f"Cable voltage is {cable_voltage} and voltage was {prev_adc0} and this current is {round(adc0, 3)}")
                 p_ldo = round(abs(cable_voltage - prev_adc0) * adc0, 3)
 
                 if "+5V" in key:
-                    self.power_rails["I5_5P [A]"] += adc0
+                    self.power_rails["I5_5P [A]"][1] += adc0
                 elif "-5V" in key:
-                    self.power_rails["I5_5N [A]"] += adc0
+                    self.power_rails["I5_5N [A]"][1] += adc0
                 elif ("3.3" in key) or ("2.5" in key):
-                    self.power_rails["I3_6P [A]"] += adc0
+                    self.power_rails["I3_6P [A]"][1] += adc0
                 elif ("1.8" in key) or ("1.5" in key):
-                    self.power_rails["I2_3P [A]"] += adc0
+                    self.power_rails["I2_3P [A]"][1] += adc0
                 elif "1.0" in key:
-                    self.power_rails["I1_5P [A]"] += adc0
+                    self.power_rails["I1_5P [A]"][1] += adc0
                 else:
                     sys.exit(f"Error: Key was {key}")
 
@@ -427,8 +439,7 @@ class LuSEE_POWER:
         return cable_voltage
 
 if __name__ == "__main__":
-    name = sys.argv[1]
-    description = sys.argv[2]
+    config_file = sys.argv[1]
 
     comm = LuSEE_COMMS()
     comm.connection.write_cdi_reg(5, 69)
@@ -445,6 +456,6 @@ if __name__ == "__main__":
     else:
         sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
 
-    power = LuSEE_POWER(name)
-    power.sequence(description)
+    power = LuSEE_POWER()
+    power.sequence(config_file)
     print("Finished!")

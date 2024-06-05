@@ -643,12 +643,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(f"Error: You need to supply a config file for this test as the argument! You had {len(sys.argv)-1} arguments!")
 
-    measure.comm.connection.write_reg(0x838, 1)
+    #measure.comm.connection.write_reg(0x838, 1)
     measure.start_test(arg)
-
-    measure.test_name = arg
-    measure.prepare_directory()
-    measure.spectrometer_data()
 
     measure.set_analog_mux(0, 0, 4, 2)
     measure.set_analog_mux(1, 1, 4, 2)
@@ -658,10 +654,9 @@ if __name__ == "__main__":
     print(f"Radian version of {rad_test} is {hex(measure.to_radian(rad_test))}")
 
     print(f"Firmware version is {measure.comm.get_firmware_version()}")
-    measure.comm.connection.write_reg(0x838, 1)
     #print(measure.comm.read_dcb_timestamp())
     #print(measure.comm.read_sys_timestamp())
-    x = measure.get_adc1_data()
+    x = measure.get_adc_data(1, False)
     print(f"Length of ADC1 data is {len(x)}")
     measure.plot(measure.twos_comp(x, 14), "ADC1", "ADC ticks", "ADC counts")
     measure.plot_adc_overlay(measure.twos_comp(x, 14), "ADC1")

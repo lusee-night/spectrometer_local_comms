@@ -717,11 +717,11 @@ class LuSEE_COMMS:
         self.reset_calibrator_formatter()
         self.connection.write_reg(0x421, 0x0)
 
-    def get_adc_stats(self, num):
+    def get_adc_stats(self, num, high, low):
         self.connection.write_reg(self.adc_stat_clr, 1)
         self.connection.write_reg(self.adc_stat_samples, num)
-        self.connection.write_reg(self.adc_stat_high_thr, 0x3FFF)
-        self.connection.write_reg(self.adc_stat_low_thr, 0x0)
+        self.connection.write_reg(self.adc_stat_high_thr, high)
+        self.connection.write_reg(self.adc_stat_low_thr, low)
         self.connection.write_reg(self.adc_stat_clr, 0)
 
         while (self.connection.read_reg(self.adc_stat_ready) == 0):
@@ -738,9 +738,10 @@ class LuSEE_COMMS:
             adc_results[f"ADC{i}_LOW_CNT"] = self.connection.read_reg(self.adc0_stat_low_cnt + (i * self.adc_stat_next))
 
             overflow = self.connection.read_reg(self.adc0_stat_ovf + (i * self.adc_stat_next))
-
-            adc_results[f"ADC{i}_AVG"] = self.connection.read_reg(self.adc0_stat_avg + (i * self.adc_stat_next)) + ((overflow & 0xFF) << 32)
-            adc_results[f"ADC{i}_SAVG"] = self.connection.read_reg(self.adc0_stat_savg + (i * self.adc_stat_next)) + (((overflow & 0xFF0000) >> 16) << 32)
+            avg_value = self.connection.read_reg(self.adc0_stat_avg + (i * self.adc_stat_next)) + ((overflow & 0xFF) << 32)
+            adc_results[f"ADC{i}_AVG"] = round(avg_value/adc_results[f"ADC{i}_CNT"], 3)
+            savg_value = self.connection.read_reg(self.adc0_stat_savg + (i * self.adc_stat_next)) + (((overflow & 0xFF0000) >> 16) << 32)
+            adc_results[f"ADC{i}_SAVG"] = round(savg_value/adc_results[f"ADC{i}_CNT"], 3)
 
         return adc_results
 
@@ -752,10 +753,4 @@ if __name__ == "__main__":
     #     print(num)
     #     resp = ethernet.set_corr_array(i, 0x3F, 0x0)
 
-    ethernet.write_adc(0, 5, 0x69)
-    resp = ethernet.read_adc(0, 5)
-    print(hex(resp))
-
-    ethernet.write_adc(1, 4, 0x67)
-    resp = ethernet.read_adc(1, 4)
-    print(hex(resp))
+    print(ethernet.get_adc_stats(1000))
