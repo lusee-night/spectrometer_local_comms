@@ -22,7 +22,7 @@
 "mux4_in2": 4,
 "mux4_gain": 2,
 
-"pretest": false,
+"pretest": true,
 
 "adc1_save_data": true,
 "adc1_plot": true,
@@ -134,6 +134,7 @@
 "power_slice": "0x9",
 "fdsd_slice": "0x0",
 "fdxsdx_slice": "0xB",
+"hold_drift": true,
 
 "print_calib": true,
 "calib_fout_plot": true,

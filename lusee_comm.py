@@ -371,8 +371,7 @@ class LuSEE_COMMS:
             upper4bits_inposition = (val_num & 0x3C) >> 2
             inverse_mask = 0xF
             resp = self.compute_index_send(upper4bits_inposition, inverse_mask, array2)
-
-            return 0x12345678
+            return resp
         elif (fft_num == 10):
             lower4bits_inposition = (val_num & 0xF) << 28
             inverse_mask = 0xF0000000
@@ -381,7 +380,7 @@ class LuSEE_COMMS:
             upper2bits_inposition = (val_num & 0x30) >> 4
             inverse_mask = 0x3
             resp = self.compute_index_send(upper2bits_inposition, inverse_mask, array3)
-            return 0x9ABCDEF
+            return resp
         #Regular channels now, getting mapped to one of three registers
         else:
             if (batch == 0):

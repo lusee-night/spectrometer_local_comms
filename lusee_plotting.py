@@ -1,6 +1,7 @@
 import os
 import json
 import math
+import sys
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -313,3 +314,7 @@ class LuSEE_PLOTTING:
             ax.plot(d, label = n)
         plt.legend()
         return fig
+
+if __name__ == "__main__":
+    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240605170932')
+    p.plot_lock_drift(True, True)
