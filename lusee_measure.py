@@ -1,8 +1,7 @@
 import os
-import time
 import sys
-import math
 import json
+import math
 from datetime import datetime
 
 from lusee_comm import LuSEE_COMMS
@@ -84,6 +83,10 @@ class LuSEE_MEASURE:
             self.setup_pfb()
 
         self.setup_calibrator()
+
+        with open(self.json_output_file, 'w', encoding='utf-8') as f:
+            json.dump(self.datastore, f, ensure_ascii=False, indent=4, default=str)
+        self.plotter = LuSEE_PLOTTING(self.results_path)
 
         self.comm.readout_mode("sw")
         all_data,all_headers = self.comm.get_calib_data_sw(
@@ -190,6 +193,53 @@ class LuSEE_MEASURE:
     def setup_calibrator(self):
         self.comm.connection.write_reg(0x813, 1)
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
+
+        base_tone = 50e3
+        samples_per_fft = 4096
+        sampling_rate = 102.4e6
+        alpha = 1e-6
+
+        phase_drift_per_ppm = base_tone * samples_per_fft / sampling_rate * alpha * 2
+        notch_averages = 2 ** self.json_data["notch_averages"]
+        alpha_to_pdrift = phase_drift_per_ppm * notch_averages
+
+        if (self.json_data["default_drift"] == "default"):
+            default_drift = 0
+        else:
+            default_drift = int(self.json_data["default_drift"], 16)
+
+        if (self.json_data["have_lock_value"] == "default"):
+            have_lock_value_raw = alpha_to_pdrift * 0.05 * math.pi
+            self.datastore['have_lock_value_calculated_raw'] = have_lock_value_raw
+            have_lock_value = self.to_radian(have_lock_value_raw)
+            self.datastore['have_lock_value_calculated_formatted'] = hex(have_lock_value)
+        else:
+            have_lock_value = int(self.json_data["have_lock_value"], 16)
+
+        if (self.json_data["have_lock_radian"] == "default"):
+            have_lock_radian_raw = alpha_to_pdrift * 0.05
+            self.datastore['have_lock_radian_calculated_raw'] = have_lock_radian_raw
+            have_lock_radian = self.to_radian(have_lock_radian_raw)
+            self.datastore['have_lock_radian_calculated_formatted'] = hex(have_lock_radian)
+        else:
+            have_lock_radian = int(self.json_data["have_lock_radian"], 16)
+
+        if (self.json_data["upper_guard_value"] == "default"):
+            upper_guard_value_raw = alpha_to_pdrift * 1.2
+            self.datastore['upper_guard_calculated_raw'] = upper_guard_value_raw
+            upper_guard_value = self.to_radian(upper_guard_value_raw)
+            self.datastore['upper_guard_calculated_formatted'] = hex(upper_guard_value)
+        else:
+            upper_guard_value = int(self.json_data["upper_guard_value"], 16)
+
+        if (self.json_data["lower_guard_value"] == "default"):
+            lower_guard_value_raw = alpha_to_pdrift * -1.2
+            self.datastore['lower_guard_calculated_raw'] = lower_guard_value_raw
+            lower_guard_value = self.to_radian(lower_guard_value_raw)
+            self.datastore['lower_guard_calculated_formatted'] = hex(lower_guard_value)
+        else:
+            lower_guard_value = int(self.json_data["lower_guard_value"], 16)
+
         self.comm.setup_calibrator(
             Nac1 = self.json_data["Nac1"],
             Nac2 = self.json_data["Nac2"],
@@ -202,11 +252,11 @@ class LuSEE_MEASURE:
             driftFD_index = self.json_data["driftFD_index"],
             driftSD1_index = self.json_data["driftSD1_index"],
             driftSD2_index = self.json_data["driftSD2_index"],
-            default_drift = int(self.json_data["default_drift"], 16),
-            have_lock_value = int(self.json_data["have_lock_value"], 16),
-            have_lock_radian = int(self.json_data["have_lock_radian"], 16),
-            lower_guard_value = int(self.json_data["lower_guard_value"], 16),
-            upper_guard_value = int(self.json_data["upper_guard_value"], 16),
+            default_drift = default_drift,
+            have_lock_value = have_lock_value,
+            have_lock_radian = have_lock_radian,
+            lower_guard_value = lower_guard_value,
+            upper_guard_value = upper_guard_value,
             power_ratio = int(self.json_data["power_ratio"], 16),
             antenna_enable = int(self.json_data["antenna_enable"], 16),
             power_slice = int(self.json_data["power_slice"], 16),
@@ -288,7 +338,6 @@ if __name__ == "__main__":
         arg = sys.argv[1]
     else:
         sys.exit("You need to supply an argument")
-    #time.sleep(10)
     measure = LuSEE_MEASURE()
     measure.comm.connection.write_cdi_reg(5, 69)
     resp = measure.comm.connection.read_cdi_reg(5)
@@ -315,26 +364,4 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(f"Error: You need to supply a config file for this test as the argument! You had {len(sys.argv)-1} arguments!")
 
-    #measure.comm.connection.write_reg(0x838, 1)
     measure.start_test(arg)
-
-    measure.set_analog_mux(0, 0, 4, 2)
-    measure.set_analog_mux(1, 1, 4, 2)
-    measure.set_analog_mux(2, 2, 4, 2)
-    measure.set_analog_mux(3, 3, 4, 2)
-    rad_test = -0.0000768
-    print(f"Radian version of {rad_test} is {hex(measure.to_radian(rad_test))}")
-
-    print(f"Firmware version is {measure.comm.get_firmware_version()}")
-    #print(measure.comm.read_dcb_timestamp())
-    #print(measure.comm.read_sys_timestamp())
-    x = measure.get_adc_data(1, False)
-    print(f"Length of ADC1 data is {len(x)}")
-    measure.plot(measure.twos_comp(x, 14), "ADC1", "ADC ticks", "ADC counts")
-    measure.plot_adc_overlay(measure.twos_comp(x, 14), "ADC1")
-    measure.get_pfb_data()
-    #measure.get_pfb_data_all_fpga()
-    measure.get_calibrator_data(setup = True)
-
-    #measure.get_pfb_data_sw()
-    #You can save/plot the output data however you wish!

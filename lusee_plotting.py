@@ -1,10 +1,10 @@
 import os
 import json
 import math
-import sys
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+from matplotlib.ticker import FuncFormatter
 
 class LuSEE_PLOTTING:
     def __init__(self, directory):
@@ -235,12 +235,25 @@ class LuSEE_PLOTTING:
         fig.suptitle(f"Drift Parameters", fontsize = self.title_size)
 
         drift_ax.plot(drift)
-        drift_ax.set_yticks([-math.pi, math.pi], labels = [r'$-\pi$', r'$\pi$'])
-        drift_ax.set_ylim([-math.pi * 1.5, math.pi * 1.5])
-        drift_ax.set_ylabel("Drift Angle", fontsize=self.label_size)
+        if (self.json_data['upper_guard_calculated_raw']):
+            upper = self.json_data['upper_guard_calculated_raw']
+        else:
+            upper = self.from_radian(self.json_data['input_params']['upper_guard_value'])
+
+        if (self.json_data['lower_guard_calculated_raw']):
+            lower = self.json_data['lower_guard_calculated_raw']
+        else:
+            lower = self.from_radian(self.json_data['input_params']['lower_guard_value'])
+
+        drift_ax.set_ylim([lower, upper])
+        drift_ax.set_ylabel("Drift Angle (radians)", fontsize=self.label_size)
         drift_ax.tick_params(axis='y', labelsize=self.tick_size)
         drift_ax.tick_params(axis='x', labelsize=self.tick_size)
         drift_ax.set_xlabel("Cycle", fontsize=self.label_size)
+
+        def scientific_formatter(val, pos):
+            return f'{val:.1e}'
+        drift_ax.yaxis.set_major_formatter(FuncFormatter(scientific_formatter))
 
         lock_ax = drift_ax.twinx()
         lock_ax.plot(lock, linestyle = '--', color = 'red')
