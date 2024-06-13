@@ -76,6 +76,7 @@ class LuSEE_MEASURE:
         return working_val
 
     def calibrator_test(self):
+        self.set_all_adc_ramp()
         if (self.json_data[f"pretest"]):
             self.spectrometer_simple()
         else:
@@ -90,7 +91,7 @@ class LuSEE_MEASURE:
 
         self.comm.readout_mode("sw")
         all_data,all_headers = self.comm.get_calib_data_sw(
-            header_return = True, avg = self.json_data["pfb_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False
+            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False
             )
         calib_dict = {"header": all_headers,
                         "data": all_data}
@@ -158,7 +159,7 @@ class LuSEE_MEASURE:
         if (self.json_data["pcb"] == "red"):
             self.comm.set_pcb(0)
         elif (self.json_data["pcb"] == "green"):
-            self.comm.set_pcb(0)
+            self.comm.set_pcb(1)
         else:
             pcb = self.json_data["pcb"]
             sys.exit(f"{self.prefix}Error, pcb model designated as {pcb}")
@@ -168,10 +169,16 @@ class LuSEE_MEASURE:
         self.comm.set_chan_gain(2, self.json_data["mux3_in1"], self.json_data["mux3_in2"], self.json_data["mux3_gain"])
         self.comm.set_chan_gain(3, self.json_data["mux4_in1"], self.json_data["mux4_in2"], self.json_data["mux4_gain"])
 
+        self.datastore['0x500'] = hex(self.comm.connection.read_reg(self.comm.mux0_reg))
+        self.datastore['0x501'] = hex(self.comm.connection.read_reg(self.comm.mux1_reg))
+        self.datastore['0x502'] = hex(self.comm.connection.read_reg(self.comm.mux2_reg))
+        self.datastore['0x503'] = hex(self.comm.connection.read_reg(self.comm.mux3_reg))
+
     def setup_pfb(self):
         avgs = self.json_data["pfb_averages"]
         self.comm.set_main_average(avgs)
         self.comm.set_notch_filter(self.json_data["notch_filter"])
+        self.comm.set_notch_subtract_disable(self.json_data["notch_subtract_disable"])
         self.comm.set_notch_average(self.json_data["notch_averages"])
         self.comm.set_sticky_error(self.json_data["sticky_errors"])
         self.comm.spectrometer_test_mode(self.json_data["pfb_test_mode"])
@@ -191,7 +198,7 @@ class LuSEE_MEASURE:
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
 
     def setup_calibrator(self):
-        self.comm.connection.write_reg(0x813, 1)
+        self.comm.connection.write_reg(0x838, 1)
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
 
         base_tone = 50e3

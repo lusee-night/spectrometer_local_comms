@@ -241,7 +241,7 @@ if __name__ == "__main__":
     boot = LuSEE_BOOTLOADER()
     boot.init_bootloader()
     #time.sleep(0.1)
-    boot.remain()
+    #boot.remain()
     #boot.get_program_info()
     #boot.load_region(region = 1)
     #boot.get_program_info()
@@ -249,8 +249,6 @@ if __name__ == "__main__":
     #boot.ddr_quick_test()
 
     boot.file_path = sys.argv[1]
-    #boot.delete_region(region = 1)
-    #time.sleep(3) #Have to add this because Jack gives us no feedback as to when the delete is finished
-    #boot.write_hex_bootloader(region = 1)
-
-    #boot.launch_software()
+    boot.delete_region(region = 1)
+    boot.write_hex_bootloader(region = 1)
+    boot.launch_software()

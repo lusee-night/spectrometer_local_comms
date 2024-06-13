@@ -166,8 +166,15 @@ class LuSEE_POWER:
         self.test_info['Firmware Compilation Datetime'] = firmware['formatted_datetime']
         self.test_info['User Description'] = self.json_data['comment']
 
-        self.comm.connection.write_reg(0x100, 6)
+
         self.measure.start_test(config_file)
+        self.comm.connection.write_reg(0x100, 6)
+        self.comm.connection.write_reg(0x213, 1)
+        self.comm.connection.write_reg(0x220, 0)
+        self.comm.connection.write_reg(0x300, 3)
+        self.comm.connection.write_reg(0x301, 3)
+        self.comm.connection.write_reg(0x401, 0)
+        self.comm.connection.write_reg(0x701, 0)
 
         num = int(self.json_data['adc_num'], 16)
         high = int(self.json_data['adc_high'], 16)

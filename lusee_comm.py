@@ -131,6 +131,7 @@ class LuSEE_COMMS:
         self.counter_num = None
         self.cycle_time = 40e-6
         self.avg = 0
+        self.notch_avg = 0
         self.Nac1_val = 0
         self.Nac2_val = 0
         self.wait_time = 0.025
@@ -303,7 +304,14 @@ class LuSEE_COMMS:
 
     def set_notch_average(self, avg):
         avg_num = int(avg)
+        self.notch_avg = avg_num
         self.connection.write_reg(self.notch_average, avg_num)
+
+    def set_notch_subtract_disable(self, val):
+        if (val):
+            self.connection.write_reg(self.notch_subtract_disable, 0xFFFF)
+        else:
+            self.connection.write_reg(self.notch_subtract_disable, 0)
 
     def set_notch_filter(self, val):
         if (val):
@@ -465,10 +473,9 @@ class LuSEE_COMMS:
 
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
-        self.connection.write_reg(self.scratchpad_2, 1)
+        self.connection.write_reg(self.scratchpad_2, 0)
         #Resets the CDI output FIFOs
         self.connection.write_reg(self.fifo_rst, 1)
-        self.connection.write_reg(self.scratchpad_2, 0)
         self.connection.write_reg(self.fifo_rst, 0)
         #Spectrometer outputs will go to microcontroller
         if (test):
@@ -483,6 +490,8 @@ class LuSEE_COMMS:
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
+        self.connection.write_reg(self.scratchpad_2, 2)
+        self.connection.write_reg(self.scratchpad_2, 0)
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
@@ -553,9 +562,9 @@ class LuSEE_COMMS:
         else:
             return all_data
 
-    def get_calib_data_sw(self, header_return = False, avg = None, Nac1 = None, Nac2 = None, test = False):
-        if (avg != None):
-            self.avg = avg
+    def get_calib_data_sw(self, header_return = False, notch_avg = None, Nac1 = None, Nac2 = None, test = False):
+        if (notch_avg != None):
+            self.notch_avg = notch_avg
         if (Nac1 != None):
             self.Nac1_val = Nac1
         if (Nac2 != None):
@@ -566,10 +575,9 @@ class LuSEE_COMMS:
 
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
-        self.connection.write_reg(self.scratchpad_2, 1)
+        self.connection.write_reg(self.scratchpad_2, 0)
         #Resets the CDI output FIFOs
         self.connection.write_reg(self.fifo_rst, 1)
-        self.connection.write_reg(self.scratchpad_2, 0)
         self.connection.write_reg(self.fifo_rst, 0)
         #Calibrator outputs will go to microcontroller
         if (test):
@@ -582,10 +590,13 @@ class LuSEE_COMMS:
         all_data = []
         all_header = []
         #Wait for averaging
-        wait_time = self.cycle_time * (2**self.avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
+        wait_time = self.cycle_time * (2**self.notch_avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
+
         if (wait_time > 1.0):
-            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg}, {self.Nac1_val}, {self.Nac2_val} averages")
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
         time.sleep(wait_time)
+        self.connection.write_reg(self.scratchpad_2, 1)
+        self.connection.write_reg(self.scratchpad_2, 0)
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations

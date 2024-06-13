@@ -2,12 +2,12 @@
 "schema": 1,
 "test": "spectrometer_simple",
 "output_directory": "power_benchmarking",
-"title": "jack_test",
-"comment": "First Article (Rev B) Motherboard with Second Article FPGA Mezzanine. TMR is enabled. Running Jack's default microcontroller software for readout. DDR disabled. Dedicated +/-5.5V input for analog. All other inputs come from single 4V wire. ADC input for all 4 channels from R&S SMW200A - Rectangular wave at 20 MHz, amplitude is high, with low analog gain on motherboard.",
+"title": "lowest_power",
+"comment": "First Article Motherboard (IO-1896-1 Rev B) with Second Article FPGA Mezzanine (IO-1894-1 Rev C). TMR is not enabled. Running Jack's default microcontroller software for readout. DDR disabled. Dedicated +/-5.5V input for analog. All other inputs come from single 4V wire. ADC input for all 4 channels from AFG3101, 20 MHz with envelope of almost full scale, with low analog gain on motherboard. As many functions on the spectrometer shut off as possible",
 "relative": true,
 
 "reset": false,
-"pcb": "green",
+"pcb": "red",
 
 "adc_num": "0xFFFE",
 "adc_high": "0x3FFF",
@@ -48,6 +48,7 @@
 
 "pfb_averages": 10,
 "notch_filter": true,
+"notch_subtract_disable": false,
 "notch_averages": 4,
 "sticky_errors": true,
 "pfb_test_mode": false,

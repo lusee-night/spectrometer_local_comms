@@ -1,6 +1,8 @@
 import os
 import json
 import math
+import sys
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -43,13 +45,22 @@ class LuSEE_PLOTTING:
 
     def from_radian(self, val):
         """compute the radian angle equivalent of int value val in Microchip format"""
-        if (not isinstance(val, int)):
+        if (isinstance(val, str)):
+            return self.convert_from_radian(int(val, 16))
+        elif (isinstance(val, list)):
             new = []
             for i in val:
-                new.append(self.convert_from_radian(i))
+                if (isinstance(i, str)):
+                    new.append(self.convert_from_radian(int(val, 16)))
+                elif (isinstance(i, int)):
+                    new.append(self.convert_from_radian(i))
+                else:
+                    sys.exit(f"Incorrect type. {val} element is of type {type(i)}")
             return new
-        else:
+        elif (isinstance(val, int)):
             return self.convert_from_radian(val)
+        else:
+            sys.exit(f"Incorrect type. {val} is of type {type(val)}")
 
     def convert_twos_comp(self, val, bits):
         if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
@@ -177,6 +188,72 @@ class LuSEE_PLOTTING:
                 fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_{names[i]}.jpg"))
             self.plot_num += 1
 
+    def plot_notches(self, show, save):
+        for i in range(1,5):
+            with open(os.path.join(self.directory, f"pfb_fpga{i}_output.json"), "r") as jsonfile:
+                calib_data = json.load(jsonfile)
+            data = calib_data["data"]
+            fig = self.plot_notch(self.twos_comp(data, 32), f"Notch Averager {i}")
+
+            if (show):
+                plt.show()
+            else:
+                plt.close(fig)
+
+            if (save):
+                fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_notch{i}.jpg"))
+            self.plot_num += 1
+
+    def plot_notches_multiple(self, directories):
+        datas = []
+        labels = []
+        for i in directories:
+            with open(os.path.join(i, f"pfb_fpga1_output.json"), "r") as jsonfile:
+                calib_data = json.load(jsonfile)
+                datas.append(self.twos_comp(calib_data["data"], 32))
+
+            with open(os.path.join(i, f"output.json"), "r") as jsonfile:
+                output_data = json.load(jsonfile)
+                dt = datetime.strptime(output_data["start_time"], '%Y-%m-%d %H:%M:%S.%f')
+                formatted_datetime = dt.strftime('%Y-%m-%d %H:%M')
+                labels.append(formatted_datetime)
+
+        fig = self.plot_notch_multiple(datas, labels)
+        plt.show()
+        plt.close(fig)
+        fig.savefig (os.path.join(i, f"multiple_notch_plots.jpg"))
+
+    def plot_notch(self, data, title):
+        fig, ax = plt.subplots()
+        #print(data)
+        x = []
+        for i in range(len(data)):
+            x.append(i / 2048 * 100 / 2)
+        fig.suptitle(title, fontsize=self.subtitle_size)
+        yaxis = "Counts"
+        ax.set_ylabel(yaxis, fontsize=self.label_size)
+        ax.set_xlabel('MHz', fontsize=self.label_size)
+        ax.ticklabel_format(style='plain', useOffset=False, axis='x')
+        ax.plot(x, data)
+        return fig
+
+    def plot_notch_multiple(self, data, labels):
+        fig, ax = plt.subplots()
+        #print(data)
+        x = []
+        for i in range(len(data[0])):
+            x.append(i / 2048 * 100 / 2)
+        fig.suptitle("Multiple notch1 plots", fontsize=self.subtitle_size)
+        yaxis = "Counts"
+        ax.set_ylabel(yaxis, fontsize=self.label_size)
+        ax.set_xlabel('MHz', fontsize=self.label_size)
+        ax.ticklabel_format(style='plain', useOffset=False, axis='x')
+        for d,l in zip(data,labels):
+            print(d)
+            ax.plot(x, d, label = l)
+        plt.legend()
+        return fig
+
     def plot_lock_drift(self, show, save):
         with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
@@ -235,12 +312,12 @@ class LuSEE_PLOTTING:
         fig.suptitle(f"Drift Parameters", fontsize = self.title_size)
 
         drift_ax.plot(drift)
-        if (self.json_data['upper_guard_calculated_raw']):
+        if ('upper_guard_calculated_raw' in self.json_data):
             upper = self.json_data['upper_guard_calculated_raw']
         else:
             upper = self.from_radian(self.json_data['input_params']['upper_guard_value'])
 
-        if (self.json_data['lower_guard_calculated_raw']):
+        if ('lower_guard_calculated_raw' in self.json_data):
             lower = self.json_data['lower_guard_calculated_raw']
         else:
             lower = self.from_radian(self.json_data['input_params']['lower_guard_value'])
@@ -329,5 +406,6 @@ class LuSEE_PLOTTING:
         return fig
 
 if __name__ == "__main__":
-    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240605170932')
-    p.plot_lock_drift(True, True)
+    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613122205')
+    p.plot_notches(True, True)
+    #p.plot_notches_multiple(['/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120850', '/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120140'])
