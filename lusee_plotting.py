@@ -405,7 +405,36 @@ class LuSEE_PLOTTING:
         plt.legend()
         return fig
 
+    def plot_adc_overlay(self):
+        with open(os.path.join(self.directory, f"adc1_output.json"), "r") as jsonfile:
+            adc_file = json.load(jsonfile)
+        data = self.twos_comp(adc_file["data"], 14)
+        num_repetitions = len(data) // 2048
+        print(f"Overall length is {len(data)}")
+        print(f"Num repetitions is {num_repetitions}")
+        adc_data = []
+        names = []
+        for i in range(num_repetitions+1):
+            adc_data.append(data[i*2048:(i*2048)+2048])
+            names.append(i)
+        #print(data[2046:2050])
+        #print(adc_data[0][2046:])
+        #print(adc_data[1][0:2])
+        #print(f"Length of one is {len(adc_data[0])}")
+        #print(f"Length of two is {len(adc_data[1])}")
+        #print(adc_data[0])
+        #print("---")
+        #print(adc_data[1])
+        #print("---")
+        #print(adc_data[2])
+
+        fig = self.plot_multiple(adc_data, "ADC1 Overlay", "ADC Counts", "ADC Values", names)
+        plt.show()
+        plt.close(fig)
+        fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_all_fdsd.jpg"))
+
 if __name__ == "__main__":
-    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613122205')
-    p.plot_notches(True, True)
+    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120140')
+    p.plot_adc_overlay()
+    #p.plot_notches(True, True)
     #p.plot_notches_multiple(['/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120850', '/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120140'])
