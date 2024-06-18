@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import math
+import time
 from datetime import datetime
 
 from lusee_comm import LuSEE_COMMS
@@ -76,7 +77,7 @@ class LuSEE_MEASURE:
         return working_val
 
     def calibrator_test(self):
-        self.set_all_adc_ramp()
+        self.comm.connection.write_reg(0x838, 1)
         if (self.json_data[f"pretest"]):
             self.spectrometer_simple()
         else:
@@ -126,6 +127,9 @@ class LuSEE_MEASURE:
                 if (self.json_data[f"adc{i}_plot"]):
                     self.plotter.plot_adc(i, self.json_data[f"adc{i}_plot_show"], self.json_data[f"adc{i}_plot_save"])
 
+                if (self.json_data[f"adc{i}_plot_overlay"]):
+                    self.plotter.plot_adc_overlay(i)
+
         self.setup_pfb()
         self.comm.readout_mode("fpga")
         for i in range(1, 5):
@@ -140,6 +144,8 @@ class LuSEE_MEASURE:
                 if (self.json_data[f"pfb{i}_fpga_plot"]):
                     self.plotter.plot_pfb_fpga(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
 
+        self.plotter.plot_notches(True, True)
+
         if (self.json_data[f"pfb_sw_save_data"]):
             self.comm.readout_mode("sw")
             all_data, all_headers = self.comm.get_pfb_data_sw(header_return = True)
@@ -151,6 +157,53 @@ class LuSEE_MEASURE:
 
             if (self.json_data[f"pfb_sw_plot"]):
                 self.plotter.plot_pfb_sw(self.json_data[f"pfb_sw_plot_show"], self.json_data[f"pfb_sw_plot_save"])
+
+    def debug(self):
+        self.comm.connection.write_reg(0x838, 1)
+        self.setup()
+        if (self.json_data[f"pretest"]):
+            for i in range(1, 5):
+                if (self.json_data[f"adc{i}_save_data"]):
+                    data, header = self.get_adc_data(i, True)
+                    adc_dict = {"header": header,
+                                "data": data}
+                    with open(os.path.join(self.results_path, f"adc{i}_output.json"), 'w', encoding='utf-8') as f:
+                        json.dump(adc_dict, f, ensure_ascii=False, indent=4, default=str)
+
+                    if (self.json_data[f"adc{i}_plot"]):
+                        self.plotter.plot_adc_overlay(i)
+
+            if (self.json_data[f"pfb_sw_save_data"]):
+                self.comm.readout_mode("sw")
+                all_data, all_headers = self.comm.get_pfb_data_sw(header_return = True)
+
+                pfb_dict = {"header": all_headers,
+                            "data": all_data}
+                with open(os.path.join(self.results_path, f"pfb_sw_output.json"), 'w', encoding='utf-8') as f:
+                    json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
+
+                if (self.json_data[f"pfb_sw_plot"]):
+                    self.plotter.plot_pfb_sw(self.json_data[f"pfb_sw_plot_show"], self.json_data[f"pfb_sw_plot_save"])
+        self.setup_pfb()
+        self.comm.readout_mode("fpga")
+        pfb_dict = {}
+
+        iterations = 256
+        for i in range(iterations):
+            self.comm.set_function(f"FFT1")
+            data, header = self.comm.get_pfb_data(header = True)
+            self.comm.set_function(f"FFT3")
+            data, header = self.comm.get_pfb_data(header = True)
+            pfb_dict.update({f"header{i}": header,
+                        f"data{i}": data})
+            self.comm.load_fft_fifos()
+            print("got it")
+        with open(os.path.join(self.results_path, f"notch_filter_output.json"), 'w', encoding='utf-8') as f:
+            json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
+
+        self.plotter.plot_notches_multiple(iterations)
+        self.plotter.plot_notches_multiple_freq(iterations)
+
     def setup(self):
         if (self.json_data["reset"]):
             self.comm.reset()
@@ -200,6 +253,20 @@ class LuSEE_MEASURE:
     def setup_calibrator(self):
         self.comm.connection.write_reg(0x838, 1)
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
+
+        self.comm.connection.write_reg(0x841, 0)
+        self.comm.connection.write_reg(0x842, 5)
+        self.comm.connection.write_reg(0x843, 25)
+
+        self.comm.connection.write_reg(0x844, 0)
+        self.comm.connection.write_reg(0x845, 2)
+        self.comm.connection.write_reg(0x846, 3)
+        self.comm.connection.write_reg(0x847, 2)
+        self.comm.connection.write_reg(0x848, 3)
+        self.comm.connection.write_reg(0x849, 2)
+        self.comm.connection.write_reg(0x84A, 3)
+        self.comm.connection.write_reg(0x84B, 2)
+        self.comm.connection.write_reg(0x84C, 3)
 
         base_tone = 50e3
         samples_per_fft = 4096
@@ -327,6 +394,8 @@ class LuSEE_MEASURE:
             self.spectrometer_simple()
         elif (test == "calibrator"):
             self.calibrator_test()
+        elif (test == "debug"):
+            self.debug()
         else:
             sys.exit(f"{self.prefix}Incorrect test supplied, {test} is not valid.")
 

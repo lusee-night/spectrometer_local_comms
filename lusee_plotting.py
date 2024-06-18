@@ -19,9 +19,11 @@ class LuSEE_PLOTTING:
         self.plot_num = 0
 
         self.directory = directory
-
-        with open(os.path.join(self.directory, "output.json"), "r") as jsonfile:
-            self.json_data = json.load(jsonfile)
+        try:
+            with open(os.path.join(self.directory, "output.json"), "r") as jsonfile:
+                self.json_data = json.load(jsonfile)
+        except:
+            pass
 
     def convert_from_radian(self, val):
         sign = val&0xC0000000
@@ -41,7 +43,7 @@ class LuSEE_PLOTTING:
             masked_val = (val & digit_mask) >> j
             if (masked_val):
                 working_val += masked_val/(2**(num+1))
-        return working_val * math.pi
+        return working_val
 
     def from_radian(self, val):
         """compute the radian angle equivalent of int value val in Microchip format"""
@@ -204,24 +206,35 @@ class LuSEE_PLOTTING:
                 fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_notch{i}.jpg"))
             self.plot_num += 1
 
-    def plot_notches_multiple(self, directories):
+    def plot_notches_multiple(self, num):
         datas = []
         labels = []
-        for i in directories:
-            with open(os.path.join(i, f"pfb_fpga1_output.json"), "r") as jsonfile:
-                calib_data = json.load(jsonfile)
-                datas.append(self.twos_comp(calib_data["data"], 32))
-
-            with open(os.path.join(i, f"output.json"), "r") as jsonfile:
-                output_data = json.load(jsonfile)
-                dt = datetime.strptime(output_data["start_time"], '%Y-%m-%d %H:%M:%S.%f')
-                formatted_datetime = dt.strftime('%Y-%m-%d %H:%M')
-                labels.append(formatted_datetime)
+        with open(os.path.join(self.directory, f"notch_filter_output.json"), "r") as jsonfile:
+            notch_data = json.load(jsonfile)
+        for i in range(num):
+            datas.append(self.twos_comp(notch_data[f"data{i}"], 32))
+            labels.append(f"Cycle{i}")
 
         fig = self.plot_notch_multiple(datas, labels)
         plt.show()
         plt.close(fig)
-        fig.savefig (os.path.join(i, f"multiple_notch_plots.jpg"))
+        fig.savefig (os.path.join(self.directory, f"multiple_notch_plots.jpg"))
+
+    def plot_notches_multiple_freq(self, num, bin_num):
+        datas = []
+        labels = []
+        with open(os.path.join(self.directory, f"notch_filter_output.json"), "r") as jsonfile:
+            notch_data = json.load(jsonfile)
+        freq_data = []
+        for i in range(num):
+            this_iteration = notch_data[f"data{i}"][bin_num]
+            freq_data.append(self.twos_comp(this_iteration, 32))
+
+        freq = bin_num * 0.25
+        fig = self.plot(freq_data, f"Notch Averager output for bin {bin_num} or {freq} MHz")
+        plt.show()
+        plt.close(fig)
+        fig.savefig (os.path.join(self.directory, f"multiple_notch_plots_{bin_num}.jpg"))
 
     def plot_notch(self, data, title):
         fig, ax = plt.subplots()
@@ -405,17 +418,33 @@ class LuSEE_PLOTTING:
         plt.legend()
         return fig
 
-    def plot_adc_overlay(self):
-        with open(os.path.join(self.directory, f"adc1_output.json"), "r") as jsonfile:
+    def plot_adc_overlay(self, ch):
+        with open(os.path.join(self.directory, f"adc{ch}_output.json"), "r") as jsonfile:
             adc_file = json.load(jsonfile)
         data = self.twos_comp(adc_file["data"], 14)
+        #print(f"Max data is {max(data)} and min data is {min(data)}")
         num_repetitions = len(data) // 2048
-        print(f"Overall length is {len(data)}")
-        print(f"Num repetitions is {num_repetitions}")
+        #print(f"Overall length is {len(data)}")
+        #print(f"Num repetitions is {num_repetitions}")
+        orig_max = data[0:2048].index(max(data[0:2048]))
+        #print(f"Orig max is {orig_max}")
         adc_data = []
         names = []
-        for i in range(num_repetitions+1):
+        for i in range(num_repetitions):
             adc_data.append(data[i*2048:(i*2048)+2048])
+            #this_max = data[i*2048:(i*2048)+2048].index(max(data[i*2048:(i*2048)+2048]))
+            #print(f"This max is {this_max}")
+            #if (this_max == orig_max):
+                #print("So stays the same")
+                #adc_data.append(data[i*2048:(i*2048)+2048])
+            #else:
+                #if (this_max > orig_max):
+                    #difference = this_max - orig_max
+                #elif (this_max < orig_max):
+                    #difference = 2048 - (orig_max - this_max)
+                #print(f"So instead of {i*2048} to {(i*2048)+2048}")
+                #print(f"We look at {(i*2048)+difference} to {(i*2048)+2048+difference}")
+                #adc_data.append(data[(i*2048)+difference:(i*2048)+2048+difference])
             names.append(i)
         #print(data[2046:2050])
         #print(adc_data[0][2046:])
@@ -428,13 +457,14 @@ class LuSEE_PLOTTING:
         #print("---")
         #print(adc_data[2])
 
-        fig = self.plot_multiple(adc_data, "ADC1 Overlay", "ADC Counts", "ADC Values", names)
+        fig = self.plot_multiple(adc_data, f"ADC{ch} Overlay", "ADC Counts", "ADC Values", names)
         plt.show()
         plt.close(fig)
-        fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_all_fdsd.jpg"))
+        fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_adc{ch}_overlay.jpg"))
 
 if __name__ == "__main__":
-    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120140')
-    p.plot_adc_overlay()
+    p = LuSEE_PLOTTING('/u/home/eraguzin/Documents/PF_EVAL_Readout/debug/20240617151543')
+    #p.plot_adc_overlay()
     #p.plot_notches(True, True)
-    #p.plot_notches_multiple(['/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120850', '/u/home/eraguzin/Documents/PF_EVAL_Readout/calibrator/20240613120140'])
+    #p.plot_notches_multiple(256)
+    p.plot_notches_multiple_freq(256, 190)
