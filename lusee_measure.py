@@ -190,10 +190,10 @@ class LuSEE_MEASURE:
 
         iterations = 256
         for i in range(iterations):
-            self.comm.set_function(f"FFT1")
+            self.comm.set_function(f"FFT4")
             data, header = self.comm.get_pfb_data(header = True)
-            self.comm.set_function(f"FFT3")
-            data, header = self.comm.get_pfb_data(header = True)
+            #self.comm.set_function(f"FFT3")
+            #data, header = self.comm.get_pfb_data(header = True)
             pfb_dict.update({f"header{i}": header,
                         f"data{i}": data})
             self.comm.load_fft_fifos()
@@ -254,10 +254,12 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x838, 1)
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
 
-        self.comm.connection.write_reg(0x841, 0)
-        self.comm.connection.write_reg(0x842, 5)
-        self.comm.connection.write_reg(0x843, 25)
+        #Frequency limiting
+        self.comm.connection.write_reg(0x841, 1)
+        self.comm.connection.write_reg(0x842, 92)
+        self.comm.connection.write_reg(0x843, 150)
 
+        #Overwrite a stable notch value
         self.comm.connection.write_reg(0x844, 0)
         self.comm.connection.write_reg(0x845, 2)
         self.comm.connection.write_reg(0x846, 3)
@@ -267,6 +269,16 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x84A, 3)
         self.comm.connection.write_reg(0x84B, 2)
         self.comm.connection.write_reg(0x84C, 3)
+
+        #Overwrite ADC ramp
+        self.comm.connection.write_reg(0x84D, 1)
+        self.comm.connection.write_reg(0x84E, 0xF)
+        self.comm.connection.write_reg(0x851, 2047)
+
+        #Choose frequency bin
+        self.comm.connection.write_reg(0x84F, 92)
+        self.comm.connection.write_reg(0x850, 92)
+        self.comm.connection.write_reg(0x214, 8)
 
         base_tone = 50e3
         samples_per_fft = 4096
