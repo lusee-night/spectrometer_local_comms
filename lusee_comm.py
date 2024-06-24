@@ -490,7 +490,9 @@ class LuSEE_COMMS:
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
+        self.connection.write_reg(self.scratchpad_2, 3)
         self.connection.write_reg(self.scratchpad_2, 2)
+        time.sleep(1)
         self.connection.write_reg(self.scratchpad_2, 0)
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
@@ -595,7 +597,9 @@ class LuSEE_COMMS:
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
         time.sleep(wait_time)
+        self.connection.write_reg(self.scratchpad_2, 3)
         self.connection.write_reg(self.scratchpad_2, 1)
+        time.sleep(1)
         self.connection.write_reg(self.scratchpad_2, 0)
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)

@@ -190,21 +190,20 @@ class LuSEE_PLOTTING:
                 fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_{names[i]}.jpg"))
             self.plot_num += 1
 
-    def plot_notches(self, show, save):
-        for i in range(1,5):
-            with open(os.path.join(self.directory, f"pfb_fpga{i}_output.json"), "r") as jsonfile:
-                calib_data = json.load(jsonfile)
-            data = calib_data["data"]
-            fig = self.plot_notch(self.twos_comp(data, 32), f"Notch Averager {i}")
+    def plot_notches(self, ch, show, save):
+        with open(os.path.join(self.directory, f"pfb_fpga{ch}_output.json"), "r") as jsonfile:
+            calib_data = json.load(jsonfile)
+        data = calib_data["data"]
+        fig = self.plot_notch(self.twos_comp(data, 32), f"Notch Averager {ch}")
 
-            if (show):
-                plt.show()
-            else:
-                plt.close(fig)
+        if (show):
+            plt.show()
+        else:
+            plt.close(fig)
 
-            if (save):
-                fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_notch{i}.jpg"))
-            self.plot_num += 1
+        if (save):
+            fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_notch{ch}.jpg"))
+        self.plot_num += 1
 
     def plot_notches_multiple(self, num):
         datas = []

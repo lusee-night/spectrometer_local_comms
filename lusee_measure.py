@@ -78,6 +78,15 @@ class LuSEE_MEASURE:
 
     def calibrator_test(self):
         self.comm.connection.write_reg(0x838, 1)
+        #Overwrite ADC ramp
+        self.comm.connection.write_reg(0x84D, 1)
+        self.comm.connection.write_reg(0x84E, 0x0)
+        self.comm.connection.write_reg(0x851, 2046)
+
+        #Choose frequency bin
+        self.comm.connection.write_reg(0x84F, 0)
+        self.comm.connection.write_reg(0x850, 511)
+        self.comm.connection.write_reg(0x214, 8)
         if (self.json_data[f"pretest"]):
             self.spectrometer_simple()
         else:
@@ -132,6 +141,8 @@ class LuSEE_MEASURE:
 
         self.setup_pfb()
         self.comm.readout_mode("fpga")
+        #input("ready?")
+        time.sleep(.2)
         for i in range(1, 5):
             if (self.json_data[f"pfb{i}_fpga_save_data"]):
                 self.comm.set_function(f"FFT{i}")
@@ -144,7 +155,7 @@ class LuSEE_MEASURE:
                 if (self.json_data[f"pfb{i}_fpga_plot"]):
                     self.plotter.plot_pfb_fpga(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
 
-        self.plotter.plot_notches(True, True)
+                self.plotter.plot_notches(i, True, True)
 
         if (self.json_data[f"pfb_sw_save_data"]):
             self.comm.readout_mode("sw")
@@ -188,9 +199,9 @@ class LuSEE_MEASURE:
         self.comm.readout_mode("fpga")
         pfb_dict = {}
 
-        iterations = 256
+        iterations = 64
         for i in range(iterations):
-            self.comm.set_function(f"FFT4")
+            self.comm.set_function(f"FFT1")
             data, header = self.comm.get_pfb_data(header = True)
             #self.comm.set_function(f"FFT3")
             #data, header = self.comm.get_pfb_data(header = True)
@@ -256,8 +267,8 @@ class LuSEE_MEASURE:
 
         #Frequency limiting
         self.comm.connection.write_reg(0x841, 1)
-        self.comm.connection.write_reg(0x842, 92)
-        self.comm.connection.write_reg(0x843, 150)
+        self.comm.connection.write_reg(0x842, 1)
+        self.comm.connection.write_reg(0x843, 250)
 
         #Overwrite a stable notch value
         self.comm.connection.write_reg(0x844, 0)
@@ -269,16 +280,6 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x84A, 3)
         self.comm.connection.write_reg(0x84B, 2)
         self.comm.connection.write_reg(0x84C, 3)
-
-        #Overwrite ADC ramp
-        self.comm.connection.write_reg(0x84D, 1)
-        self.comm.connection.write_reg(0x84E, 0xF)
-        self.comm.connection.write_reg(0x851, 2047)
-
-        #Choose frequency bin
-        self.comm.connection.write_reg(0x84F, 92)
-        self.comm.connection.write_reg(0x850, 92)
-        self.comm.connection.write_reg(0x214, 8)
 
         base_tone = 50e3
         samples_per_fft = 4096
