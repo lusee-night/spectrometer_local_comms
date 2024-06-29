@@ -466,4 +466,6 @@ if __name__ == "__main__":
     #p.plot_adc_overlay()
     #p.plot_notches(True, True)
     #p.plot_notches_multiple(256)
+    print(p.twos_comp(-3 * 3435, 32))
+    input("k")
     p.plot_notches_multiple_freq(256, 190)

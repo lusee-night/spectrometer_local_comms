@@ -111,6 +111,9 @@ class LuSEE_COMMS:
         self.CF_Enable = 0x814
         self.CF_TST_Mode_En = 0x815
         self.CF_start_ADDR = 0x816
+        self.restrict_frequency = 0x841
+        self.lower_frequency = 0x842
+        self.upper_frequency = 0x843
 
         self.readout_modes = {
             "FFT1": 0,
@@ -596,7 +599,14 @@ class LuSEE_COMMS:
 
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
-        time.sleep(wait_time)
+        time.sleep(wait_time/4)
+        self.pulse_calibrator_clock()
+        time.sleep(wait_time/4)
+        self.pulse_calibrator_clock()
+        time.sleep(wait_time/4)
+        self.pulse_calibrator_clock()
+        time.sleep(wait_time/4)
+        self.get_calib_errors()
         self.connection.write_reg(self.scratchpad_2, 3)
         self.connection.write_reg(self.scratchpad_2, 1)
         time.sleep(1)
@@ -667,6 +677,16 @@ class LuSEE_COMMS:
         else:
             return all_data
 
+    def pulse_calibrator_clock(self):
+        self.connection.write_reg(0x839, 0)
+        self.connection.write_reg(0x83A, 0)
+        self.connection.write_reg(0x83B, 0)
+        self.connection.write_reg(0x83B, 1)
+
+    def get_calib_errors(self):
+        for i in range(0x81c, 0x837+1):
+            print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
+
     def set_chan_gain(self, ch, in1, in2, gain):
         chs=[2,1,0,3,4,5,6,7]
         gains=[[2,0,1],[1,2,0],[2,0,1],[1,2,0]]
@@ -697,7 +717,7 @@ class LuSEE_COMMS:
 
     def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,
                          driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable,
-                         power_slice, fdsd_slice, fdxsdx_slice):
+                         power_slice, fdsd_slice, fdxsdx_slice, restrict_frequency, lower_frequency, upper_frequency):
 
         self.connection.write_reg(self.Nac1, Nac1)
         self.connection.write_reg(self.Nac2, Nac2)
@@ -721,6 +741,10 @@ class LuSEE_COMMS:
         self.connection.write_reg(0x83D, power_slice)
         self.connection.write_reg(0x83E, fdsd_slice)
         self.connection.write_reg(0x83F, fdxsdx_slice)
+
+        self.connection.write_reg(self.restrict_frequency, restrict_frequency)
+        self.connection.write_reg(self.lower_frequency, lower_frequency)
+        self.connection.write_reg(self.upper_frequency, upper_frequency)
 
     def get_adc_stats(self, num, high, low):
         self.connection.write_reg(self.adc_stat_clr, 1)
@@ -757,5 +781,7 @@ if __name__ == "__main__":
     # for num,i in enumerate(ethernet.fft_sel):
     #     print(num)
     #     resp = ethernet.set_corr_array(i, 0x3F, 0x0)
+    for i in range(1000):
+        ethernet.pulse_calibrator_clock()
 
-    print(ethernet.get_adc_stats(0xFFFE, 0x3FFF, 0x0))
+    #print(ethernet.get_adc_stats(0xFFFE, 0x3FFF, 0x0))

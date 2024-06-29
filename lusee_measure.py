@@ -155,7 +155,7 @@ class LuSEE_MEASURE:
                 if (self.json_data[f"pfb{i}_fpga_plot"]):
                     self.plotter.plot_pfb_fpga(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
 
-                self.plotter.plot_notches(i, True, True)
+                #self.plotter.plot_notches(i, True, True)
 
         if (self.json_data[f"pfb_sw_save_data"]):
             self.comm.readout_mode("sw")
@@ -265,10 +265,7 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x838, 1)
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
 
-        #Frequency limiting
-        self.comm.connection.write_reg(0x841, 1)
-        self.comm.connection.write_reg(0x842, 1)
-        self.comm.connection.write_reg(0x843, 250)
+        self.comm.set_cal_sticky_error(self.json_data["sticky_errors"])
 
         #Overwrite a stable notch value
         self.comm.connection.write_reg(0x844, 0)
@@ -348,7 +345,10 @@ class LuSEE_MEASURE:
             antenna_enable = int(self.json_data["antenna_enable"], 16),
             power_slice = int(self.json_data["power_slice"], 16),
             fdsd_slice = int(self.json_data["fdsd_slice"], 16),
-            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16)
+            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16),
+            restrict_frequency = self.json_data["limit_frequency"],
+            lower_frequency = self.json_data["lower_frequency"],
+            upper_frequency = self.json_data["upper_frequency"]
             )
         if (self.json_data["reset_cal"]):
             self.calibrator_reset()
