@@ -77,7 +77,6 @@ class LuSEE_MEASURE:
         return working_val
 
     def calibrator_test(self):
-        self.comm.connection.write_reg(0x838, 1)
         #Overwrite ADC ramp
         self.comm.connection.write_reg(0x84D, 1)
         self.comm.connection.write_reg(0x84E, 0x0)
@@ -170,7 +169,6 @@ class LuSEE_MEASURE:
                 self.plotter.plot_pfb_sw(self.json_data[f"pfb_sw_plot_show"], self.json_data[f"pfb_sw_plot_save"])
 
     def debug(self):
-        self.comm.connection.write_reg(0x838, 1)
         self.setup()
         if (self.json_data[f"pretest"]):
             for i in range(1, 5):
@@ -262,7 +260,6 @@ class LuSEE_MEASURE:
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
 
     def setup_calibrator(self):
-        self.comm.connection.write_reg(0x838, 1)
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
 
         self.comm.set_cal_sticky_error(self.json_data["sticky_errors"])
@@ -289,6 +286,9 @@ class LuSEE_MEASURE:
 
         if (self.json_data["default_drift"] == "default"):
             default_drift = 0
+        elif(isinstance(self.json_data["default_drift"], float)):
+            default_drift = self.to_radian(self.json_data["default_drift"])
+            self.datastore['default_drift_value_calculated_formatted'] = hex(default_drift)
         else:
             default_drift = int(self.json_data["default_drift"], 16)
 
@@ -296,6 +296,9 @@ class LuSEE_MEASURE:
             have_lock_value_raw = alpha_to_pdrift * 0.05 * math.pi
             self.datastore['have_lock_value_calculated_raw'] = have_lock_value_raw
             have_lock_value = self.to_radian(have_lock_value_raw)
+            self.datastore['have_lock_value_calculated_formatted'] = hex(have_lock_value)
+        elif(isinstance(self.json_data["have_lock_value"], float)):
+            have_lock_value = self.to_radian(self.json_data["have_lock_value"])
             self.datastore['have_lock_value_calculated_formatted'] = hex(have_lock_value)
         else:
             have_lock_value = int(self.json_data["have_lock_value"], 16)
@@ -305,6 +308,9 @@ class LuSEE_MEASURE:
             self.datastore['have_lock_radian_calculated_raw'] = have_lock_radian_raw
             have_lock_radian = self.to_radian(have_lock_radian_raw)
             self.datastore['have_lock_radian_calculated_formatted'] = hex(have_lock_radian)
+        elif(isinstance(self.json_data["have_lock_radian"], float)):
+            have_lock_radian = self.to_radian(self.json_data["have_lock_radian"])
+            self.datastore['have_lock_radian_calculated_formatted'] = hex(have_lock_radian)
         else:
             have_lock_radian = int(self.json_data["have_lock_radian"], 16)
 
@@ -313,6 +319,9 @@ class LuSEE_MEASURE:
             self.datastore['upper_guard_calculated_raw'] = upper_guard_value_raw
             upper_guard_value = self.to_radian(upper_guard_value_raw)
             self.datastore['upper_guard_calculated_formatted'] = hex(upper_guard_value)
+        elif(isinstance(self.json_data["upper_guard_value"], float)):
+            upper_guard_value = self.to_radian(self.json_data["upper_guard_value"])
+            self.datastore['upper_guard_calculated_formatted'] = hex(upper_guard_value)
         else:
             upper_guard_value = int(self.json_data["upper_guard_value"], 16)
 
@@ -320,6 +329,9 @@ class LuSEE_MEASURE:
             lower_guard_value_raw = alpha_to_pdrift * -1.2
             self.datastore['lower_guard_calculated_raw'] = lower_guard_value_raw
             lower_guard_value = self.to_radian(lower_guard_value_raw)
+            self.datastore['lower_guard_calculated_formatted'] = hex(lower_guard_value)
+        elif(isinstance(self.json_data["lower_guard_value"], float)):
+            lower_guard_value = self.to_radian(self.json_data["lower_guard_value"])
             self.datastore['lower_guard_calculated_formatted'] = hex(lower_guard_value)
         else:
             lower_guard_value = int(self.json_data["lower_guard_value"], 16)
@@ -363,11 +375,6 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x421, 0xFF)
 
         self.calibrator_reset()
-        #self.connection.write_reg(0x838, 1)
-        #self.connection.write_reg(0x839, 1)
-        #self.connection.write_reg(0x83A, 1)
-        #self.connection.write_reg(0x83B, 1)
-        #self.connection.write_reg(0x83C, 1)
         input("Ready?")
         self.calibrator_reset()
         self.comm.connection.write_reg(0x421, 0x0)

@@ -476,7 +476,11 @@ class LuSEE_COMMS:
 
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
+        self.connection.write_reg(self.scratchpad_2, 3)
+        self.connection.write_reg(self.scratchpad_2, 2)
+        time.sleep(1)
         self.connection.write_reg(self.scratchpad_2, 0)
+
         #Resets the CDI output FIFOs
         self.connection.write_reg(self.fifo_rst, 1)
         self.connection.write_reg(self.fifo_rst, 0)
@@ -493,10 +497,7 @@ class LuSEE_COMMS:
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
-        self.connection.write_reg(self.scratchpad_2, 3)
-        self.connection.write_reg(self.scratchpad_2, 2)
-        time.sleep(1)
-        self.connection.write_reg(self.scratchpad_2, 0)
+
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
@@ -580,7 +581,11 @@ class LuSEE_COMMS:
 
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
+        self.connection.write_reg(self.scratchpad_2, 3)
+        self.connection.write_reg(self.scratchpad_2, 1)
+        time.sleep(1)
         self.connection.write_reg(self.scratchpad_2, 0)
+
         #Resets the CDI output FIFOs
         self.connection.write_reg(self.fifo_rst, 1)
         self.connection.write_reg(self.fifo_rst, 0)
@@ -599,18 +604,9 @@ class LuSEE_COMMS:
 
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
-        time.sleep(wait_time/4)
-        self.pulse_calibrator_clock()
-        time.sleep(wait_time/4)
-        self.pulse_calibrator_clock()
-        time.sleep(wait_time/4)
-        self.pulse_calibrator_clock()
-        time.sleep(wait_time/4)
+        time.sleep(wait_time)
         self.get_calib_errors()
-        self.connection.write_reg(self.scratchpad_2, 3)
-        self.connection.write_reg(self.scratchpad_2, 1)
-        time.sleep(1)
-        self.connection.write_reg(self.scratchpad_2, 0)
+
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
@@ -677,14 +673,8 @@ class LuSEE_COMMS:
         else:
             return all_data
 
-    def pulse_calibrator_clock(self):
-        self.connection.write_reg(0x839, 0)
-        self.connection.write_reg(0x83A, 0)
-        self.connection.write_reg(0x83B, 0)
-        self.connection.write_reg(0x83B, 1)
-
     def get_calib_errors(self):
-        for i in range(0x81c, 0x837+1):
+        for i in range(0x81c, 0x83B+1):
             print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
 
     def set_chan_gain(self, ch, in1, in2, gain):
@@ -781,7 +771,5 @@ if __name__ == "__main__":
     # for num,i in enumerate(ethernet.fft_sel):
     #     print(num)
     #     resp = ethernet.set_corr_array(i, 0x3F, 0x0)
-    for i in range(1000):
-        ethernet.pulse_calibrator_clock()
 
     #print(ethernet.get_adc_stats(0xFFFE, 0x3FFF, 0x0))

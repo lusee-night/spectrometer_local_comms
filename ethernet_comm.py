@@ -399,7 +399,6 @@ class LuSEE_ETHERNET:
                     data = sock_readresp.recv(self.BUFFER_SIZE)
                     break
             except socket.timeout:
-                sock_readresp.close()
                 if (not keep_listening):
                     print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
                     print ("Waited for CDI response on")
@@ -408,6 +407,7 @@ class LuSEE_ETHERNET:
                 else:
                     print("Packets stopped coming")
                     break
+                sock_readresp.close()
         sock_readresp.close()
 
         if (keep_listening):
