@@ -3,7 +3,7 @@
 "test": "calibrator",
 "output_directory": "calibrator",
 "title": "Testing",
-"comment": "Trying to induce errors to make sure that works",
+"comment": "T",
 "relative": true,
 
 "reset": false,

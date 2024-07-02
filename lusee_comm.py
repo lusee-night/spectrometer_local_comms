@@ -111,9 +111,11 @@ class LuSEE_COMMS:
         self.CF_Enable = 0x814
         self.CF_TST_Mode_En = 0x815
         self.CF_start_ADDR = 0x816
+        self.cal_enable = 0x83C
         self.restrict_frequency = 0x841
         self.lower_frequency = 0x842
         self.upper_frequency = 0x843
+        self.debug_fifo_used = 0x852
 
         self.readout_modes = {
             "FFT1": 0,
@@ -568,7 +570,8 @@ class LuSEE_COMMS:
         else:
             return all_data
 
-    def get_calib_data_sw(self, header_return = False, notch_avg = None, Nac1 = None, Nac2 = None, test = False):
+    def get_calib_data_sw(self, header_return = False, notch_avg = None, Nac1 = None, Nac2 = None, test = False,
+                          wait_for_confirmation = False):
         if (notch_avg != None):
             self.notch_avg = notch_avg
         if (Nac1 != None):
@@ -595,7 +598,12 @@ class LuSEE_COMMS:
             self.connection.write_reg(self.CF_TST_Mode_En, 1)
         else:
             self.connection.write_reg(self.CF_TST_Mode_En, 0)
+
+        if (wait_for_confirmation):
+            input("Ready to start calibration data?")
+
         self.connection.write_reg(self.CF_Enable, 1)
+        self.connection.write_reg(self.cal_enable, 1)
 
         all_data = []
         all_header = []
@@ -669,6 +677,11 @@ class LuSEE_COMMS:
             all_data.append(data)
             all_header.append(header)
         if (header_return):
+            d = {}
+            d['debug_fifo_used'] = self.connection.read_reg(self.debug_fifo_used)
+            for i in range(0x81c, 0x83B+1):
+                d[f"Register {hex(i)}"] = hex(self.connection.read_reg(i))
+            all_header.append(d)
             return all_data, all_header
         else:
             return all_data
@@ -698,11 +711,10 @@ class LuSEE_COMMS:
             self.connection.write_reg(self.mux3_reg, mux_byte)
         return mux_byte
 
-    def reset_calibrator(self):
+    def reset_calibrator(self, hold = False):
         self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_bit)
-        self.connection.write_reg(self.calibrator_reset, 0)
 
-    def reset_calibrator_formatter(self):
+    def reset_calibrator_formatter(self, hold = False):
         self.connection.write_reg(self.calibrator_reset, 1 << self.calibrator_formatter_bit)
 
     def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,

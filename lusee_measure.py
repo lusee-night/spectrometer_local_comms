@@ -86,11 +86,16 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x84F, 0)
         self.comm.connection.write_reg(0x850, 511)
         self.comm.connection.write_reg(0x214, 8)
+
         if (self.json_data[f"pretest"]):
             self.spectrometer_simple()
         else:
             self.setup()
             self.setup_pfb()
+
+        if (self.json_data["reset_cal"]):
+            self.comm.connection.write_reg(self.comm.cal_enable, 0)
+            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
 
         self.setup_calibrator()
 
@@ -100,7 +105,8 @@ class LuSEE_MEASURE:
 
         self.comm.readout_mode("sw")
         all_data,all_headers = self.comm.get_calib_data_sw(
-            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False
+            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
+            wait_for_confirmation = self.json_data["wait_to_start"]
             )
         calib_dict = {"header": all_headers,
                         "data": all_data}
@@ -362,22 +368,10 @@ class LuSEE_MEASURE:
             lower_frequency = self.json_data["lower_frequency"],
             upper_frequency = self.json_data["upper_frequency"]
             )
-        if (self.json_data["reset_cal"]):
-            self.calibrator_reset()
-        if (self.json_data["wait_to_start"]):
-            self.calibrator_wait()
 
     def calibrator_reset(self):
-        self.comm.reset_calibrator()
         self.comm.reset_calibrator_formatter()
-
-    def calibrator_wait(self):
-        self.comm.connection.write_reg(0x421, 0xFF)
-
-        self.calibrator_reset()
-        input("Ready?")
-        self.calibrator_reset()
-        self.comm.connection.write_reg(0x421, 0x0)
+        self.comm.reset_calibrator()
 
     def start_test(self, config_file):
         print(f"{self.prefix}Initializing Test")
