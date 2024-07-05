@@ -10,7 +10,7 @@ from lusee_plotting import LuSEE_PLOTTING
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.11
+        self.version = 1.12
         self.comm = LuSEE_COMMS()
         self.prefix = "LuSEE Measure --> "
         self.tick_size = 22

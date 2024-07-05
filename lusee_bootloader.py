@@ -49,10 +49,10 @@ class LuSEE_BOOTLOADER:
         #Send reset microcontroller packet
         resp = self.connection.send_bootloader_message_response(self.connection.RESET_UC)
         self.write_to_file(resp)
-        if (int(resp[0]['BL_Message'], 16) == self.connection.BL_RESET):
-            print(f"{self.name}Microcontroller reset")
-        else:
-            sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
+        # if (int(resp[0]['BL_Message'], 16) == self.connection.BL_RESET):
+        #     print(f"{self.name}Microcontroller reset")
+        # else:
+        #     sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
         #Send remain in bootloader message
         self.connection.send_bootloader_message(self.REMAIN)
 

@@ -10,7 +10,7 @@ from matplotlib.ticker import FuncFormatter
 
 class LuSEE_PLOTTING:
     def __init__(self, directory):
-        self.version = 1.0
+        self.version = 1.1
         self.prefix = "LuSEE Plotting --> "
         self.tick_size = 22
         self.title_size = 32
