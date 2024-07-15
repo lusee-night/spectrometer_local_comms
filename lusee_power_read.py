@@ -5,13 +5,14 @@ import pandas as pd
 import json
 
 from lusee_hk_eric import LuSEE_HK
+from lusee_hk_emulator import LuSEE_HK_EMULATOR
 from lusee_comm import LuSEE_COMMS
 from lusee_measure import LuSEE_MEASURE
 
 class LuSEE_POWER:
     def __init__(self):
         self.version = 1.01
-        self.hk = LuSEE_HK()
+        self.hk = LuSEE_HK_EMULATOR()
         self.measure = LuSEE_MEASURE()
         self.comm = LuSEE_COMMS()
         
@@ -42,9 +43,9 @@ class LuSEE_POWER:
         #When power data is collected, it happens in this order
         #Each listing needs the value to set the multiplexer chain to to bring the reading to the HK ADC
         self.configurations = {
-                               "FPGA Thermistor (Kelvin)":0x14,
-                               "ADC0 Thermistor (Kelvin)":0x15,
-                               "ADC1 Thermistor (Kelvin)":0x16,
+                               #"FPGA Thermistor (Kelvin)":0x14,
+                               #"ADC0 Thermistor (Kelvin)":0x15,
+                               #"ADC1 Thermistor (Kelvin)":0x16,
 
                                "+5V Output Voltage":0,
                                "+5V Output Current":1,
@@ -77,25 +78,25 @@ class LuSEE_POWER:
                                "ADC0 Thermistor (Kelvin)":1,
                                "ADC1 Thermistor (Kelvin)":1,
 
-                               "+5V Output Voltage":0.98,
-                               "+5V Output Current":0.86,
-                               "-5V Output Voltage":0.97,
-                               "-5V Output Current":0.85,
+                               "+5V Output Voltage":1,
+                               "+5V Output Current":1,
+                               "-5V Output Voltage":1,
+                               "-5V Output Current":1,
 
-                               "1.8VA Output Voltage":0.85,
-                               "1.8VA Output Current":0.91,
-                               "1.8VAD Output Voltage":0.85,
-                               "1.8VAD Output Current":0.95,
+                               "1.8VA Output Voltage":1,
+                               "1.8VA Output Current":1,
+                               "1.8VAD Output Voltage":1,
+                               "1.8VAD Output Current":1,
 
-                               "3.3VD Output Voltage":0.98,
+                               "3.3VD Output Voltage":1,
                                "3.3VD Output Current":1.00,
-                               "2.5VD Output Voltage":0.94,
-                               "2.5VD Output Current":1.8,
+                               "2.5VD Output Voltage":1,
+                               "2.5VD Output Current":1,
 
-                               "1.8VD Output Voltage":0.87,
-                               "1.8VD Output Current":1.05,
-                               "1.5VD Output Voltage":0.96,
-                               "1.5VD Output Current":1.02,
+                               "1.8VD Output Voltage":1,
+                               "1.8VD Output Current":1.0,
+                               "1.5VD Output Voltage":1,
+                               "1.5VD Output Current":1.0,
                                "1.0VD Output Voltage":1.00,
                                "1.0VD Output Current":1.00,
                                }
@@ -159,67 +160,68 @@ class LuSEE_POWER:
         self.test_info['Test Datetime Start'] = start.strftime("%B %d, %Y %I:%M:%S %p")
         self.test_info['Test Datetime End'] = None
         self.test_info['Test Duration'] = None
-        firmware = self.comm.get_firmware_version()
+        if (not emulator):
+            firmware = self.comm.get_firmware_version()
 
-        self.test_info['Firmware Version'] = firmware['version']
-        self.test_info['Firmware ID'] = firmware['id']
-        self.test_info['Firmware Compilation Datetime'] = firmware['formatted_datetime']
+            self.test_info['Firmware Version'] = firmware['version']
+            self.test_info['Firmware ID'] = firmware['id']
+            self.test_info['Firmware Compilation Datetime'] = firmware['formatted_datetime']
         self.test_info['User Description'] = self.json_data['comment']
 
+        if (not emulator):
+            self.measure.start_test(config_file)
+            self.comm.connection.write_reg(0x100, 6)
+            self.comm.connection.write_reg(0x213, 1)
+            self.comm.connection.write_reg(0x220, 0)
+            self.comm.connection.write_reg(0x300, 3)
+            self.comm.connection.write_reg(0x301, 3)
+            self.comm.connection.write_reg(0x401, 0)
+            self.comm.connection.write_reg(0x701, 0)
 
-        self.measure.start_test(config_file)
-        self.comm.connection.write_reg(0x100, 6)
-        self.comm.connection.write_reg(0x213, 1)
-        self.comm.connection.write_reg(0x220, 0)
-        self.comm.connection.write_reg(0x300, 3)
-        self.comm.connection.write_reg(0x301, 3)
-        self.comm.connection.write_reg(0x401, 0)
-        self.comm.connection.write_reg(0x701, 0)
+            num = int(self.json_data['adc_num'], 16)
+            high = int(self.json_data['adc_high'], 16)
+            low = int(self.json_data['adc_low'], 16)
 
-        num = int(self.json_data['adc_num'], 16)
-        high = int(self.json_data['adc_high'], 16)
-        low = int(self.json_data['adc_low'], 16)
+            adc_stats = {"HIGH_THRESHOLD": high,
+                        "LOW_THRESHOLD": low}
+            stats = self.comm.get_adc_stats(num = num, high = high, low = low)
+            print(stats)
+            adc_stats.update(stats)
 
-        adc_stats = {"HIGH_THRESHOLD": high,
-                     "LOW_THRESHOLD": low}
-        stats = self.comm.get_adc_stats(num = num, high = high, low = low)
-        print(stats)
-        adc_stats.update(stats)
+            self.settings_info['Register 0x100'] = hex(comm.connection.read_reg(comm.uC_reset))
+            self.settings_info['Register 0x101'] = hex(comm.connection.read_reg(comm.DDR_reg))
+            self.settings_info['ADC0 gain and config (Register 0x500)'] = hex(comm.connection.read_reg(comm.mux0_reg))
+            self.settings_info['ADC1 gain and config (Register 0x501)'] = hex(comm.connection.read_reg(comm.mux1_reg))
+            self.settings_info['ADC2 gain and config (Register 0x502)'] = hex(comm.connection.read_reg(comm.mux2_reg))
+            self.settings_info['ADC3 gain and config (Register 0x503)'] = hex(comm.connection.read_reg(comm.mux3_reg))
+            self.settings_info['Spectrometer Enabled'] = hex(comm.connection.read_reg(comm.enable_spe))
+            self.settings_info['Spectrometer Averages'] = 2 ** comm.connection.read_reg(comm.main_average)
+            self.settings_info['Notch Filter Enabled'] = hex(comm.connection.read_reg(comm.notch_reg))
+            self.settings_info['Notch Averages'] = 2 ** comm.connection.read_reg(comm.notch_average)
 
-        self.settings_info['Register 0x100'] = hex(comm.connection.read_reg(comm.uC_reset))
-        self.settings_info['Register 0x101'] = hex(comm.connection.read_reg(comm.DDR_reg))
-        self.settings_info['ADC0 gain and config (Register 0x500)'] = hex(comm.connection.read_reg(comm.mux0_reg))
-        self.settings_info['ADC1 gain and config (Register 0x501)'] = hex(comm.connection.read_reg(comm.mux1_reg))
-        self.settings_info['ADC2 gain and config (Register 0x502)'] = hex(comm.connection.read_reg(comm.mux2_reg))
-        self.settings_info['ADC3 gain and config (Register 0x503)'] = hex(comm.connection.read_reg(comm.mux3_reg))
-        self.settings_info['Spectrometer Enabled'] = hex(comm.connection.read_reg(comm.enable_spe))
-        self.settings_info['Spectrometer Averages'] = 2 ** comm.connection.read_reg(comm.main_average)
-        self.settings_info['Notch Filter Enabled'] = hex(comm.connection.read_reg(comm.notch_reg))
-        self.settings_info['Notch Averages'] = 2 ** comm.connection.read_reg(comm.notch_average)
+            self.settings_info['Spectrometer Blocks Disabled'] = hex(comm.connection.read_reg(comm.spe_disable))
+            self.settings_info['Notch Averagers Disabled'] = hex(comm.connection.read_reg(comm.calibrator_and_notch_disable))
+            self.settings_info['Main Averagers Disabled'] = hex(comm.connection.read_reg(comm.avg_disable))
+            self.settings_info['Notch Correlators Disabled'] = hex(comm.connection.read_reg(comm.corr_notch_disable))
+            self.settings_info['Main Correlators Disabled'] = hex(comm.connection.read_reg(comm.corr_main_disable))
+            self.settings_info['Notch Subtract Disabled'] = hex(comm.connection.read_reg(comm.notch_subtract_disable))
 
-        self.settings_info['Spectrometer Blocks Disabled'] = hex(comm.connection.read_reg(comm.spe_disable))
-        self.settings_info['Notch Averagers Disabled'] = hex(comm.connection.read_reg(comm.calibrator_and_notch_disable))
-        self.settings_info['Main Averagers Disabled'] = hex(comm.connection.read_reg(comm.avg_disable))
-        self.settings_info['Notch Correlators Disabled'] = hex(comm.connection.read_reg(comm.corr_notch_disable))
-        self.settings_info['Main Correlators Disabled'] = hex(comm.connection.read_reg(comm.corr_main_disable))
-        self.settings_info['Notch Subtract Disabled'] = hex(comm.connection.read_reg(comm.notch_subtract_disable))
+            self.settings_info['Correlation Array 1'] = hex(comm.connection.read_reg(comm.corr_array1))
+            self.settings_info['Correlation Array 2'] = hex(comm.connection.read_reg(comm.corr_array2))
+            self.settings_info['Correlation Array 3'] = hex(comm.connection.read_reg(comm.corr_array3))
+            self.settings_info['Notch Array 1'] = hex(comm.connection.read_reg(comm.notch_array1))
+            self.settings_info['Notch Array 2'] = hex(comm.connection.read_reg(comm.notch_array2))
+            self.settings_info['Notch Array 3'] = hex(comm.connection.read_reg(comm.notch_array3))
 
-        self.settings_info['Correlation Array 1'] = hex(comm.connection.read_reg(comm.corr_array1))
-        self.settings_info['Correlation Array 2'] = hex(comm.connection.read_reg(comm.corr_array2))
-        self.settings_info['Correlation Array 3'] = hex(comm.connection.read_reg(comm.corr_array3))
-        self.settings_info['Notch Array 1'] = hex(comm.connection.read_reg(comm.notch_array1))
-        self.settings_info['Notch Array 2'] = hex(comm.connection.read_reg(comm.notch_array2))
-        self.settings_info['Notch Array 3'] = hex(comm.connection.read_reg(comm.notch_array3))
+            self.settings_info['Calibrator Phaser Averages'] = 2 ** (5 + (comm.connection.read_reg(comm.Nac1)))
+            self.settings_info['Calibrator Process Averages'] = 2 ** comm.connection.read_reg(comm.Nac2)
 
-        self.settings_info['Calibrator Phaser Averages'] = 2 ** (5 + (comm.connection.read_reg(comm.Nac1)))
-        self.settings_info['Calibrator Process Averages'] = 2 ** comm.connection.read_reg(comm.Nac2)
-
-        print("Setting up internal FPGA voltage readings")
-        self.hk.setup_fpga_internal()
-        print("Setting up I2C Mux")
-        self.hk.init_i2c_mux()
-        print("Setting up I2C ADC")
-        self.hk.init_i2c_adc()
+            print("Setting up internal FPGA voltage readings")
+            self.hk.setup_fpga_internal()
+            print("Setting up I2C Mux")
+            self.hk.init_i2c_mux()
+            print("Setting up I2C ADC")
+            self.hk.init_i2c_adc()
 
         print(f"Started the spectrometer and PCB settings, waiting {self.delay} seconds for power to stabilize")
         time.sleep(self.delay)
@@ -353,6 +355,8 @@ class LuSEE_POWER:
             while (resp != 0):
                 resp = self.hk.write_i2c_mux(val)
 
+            time.sleep(self.delay)
+
             #Once the mux is set, this reads the ADC which the mux is pointing to
             #The ADC0 channel measures the voltage directly
             #The ADC4 channel measures the voltage after going through a 1/2 voltage divider, anticipating having to read any higher voltages than the ADC reference
@@ -447,21 +451,23 @@ class LuSEE_POWER:
 
 if __name__ == "__main__":
     config_file = sys.argv[1]
+    emulator = sys.argv[2]
 
     comm = LuSEE_COMMS()
-    comm.connection.write_cdi_reg(5, 69)
-    resp = comm.connection.read_cdi_reg(5)
+    comm.connection.write_cdi_reg(7, 69)
+    resp = comm.connection.read_cdi_reg(7)
     if (resp == 69):
         print("[TEST]", "Communication to DCB Emulator is ok")
     else:
         sys.exit("[TEST] -> Communication to DCB Emulator is not ok")
 
-    comm.connection.write_reg(0x120, 69)
-    resp = comm.connection.read_reg(0x120)
-    if (resp == 69):
-        print("[TEST]", "Communication to Spectrometer Board is ok")
-    else:
-        sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
+    if (not emulator):
+        comm.connection.write_reg(0x120, 69)
+        resp = comm.connection.read_reg(0x120)
+        if (resp == 69):
+            print("[TEST]", "Communication to Spectrometer Board is ok")
+        else:
+            sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
 
     power = LuSEE_POWER()
     power.sequence(config_file)

@@ -508,7 +508,6 @@ class LuSEE_ETHERNET:
         return program_info_dict
 
 if __name__ == "__main__":
-    #arg = sys.argv[1]
-    luseeEthernet = LuSEE_ETHERNET()
-
-    print(luseeEthernet.read_cdi_reg(0x120))
+    arg = sys.argv[1]
+    e = LuSEE_ETHERNET()
+    e.write_reg(3, 1)
