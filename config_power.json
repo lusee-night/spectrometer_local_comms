@@ -2,8 +2,8 @@
 "schema": 1,
 "test": "spectrometer_simple",
 "output_directory": "power_benchmarking",
-"title": "lowest_power",
-"comment": "First Article Motherboard (IO-1896-1 Rev B) with Second Article FPGA Mezzanine (IO-1894-1 Rev C). TMR is not enabled. Running Jack's default microcontroller software for readout. DDR disabled. Dedicated +/-5.5V input for analog. All other inputs come from single 4V wire. ADC input for all 4 channels from AFG3101, 20 MHz with envelope of almost full scale, with low analog gain on motherboard. As many functions on the spectrometer shut off as possible",
+"title": "ssl_engineering_models",
+"comment": "Test at SSL. First Article Motherboard (IO-1896-1 Rev B) with Second Article FPGA Mezzanine (IO-1894-1 Rev C). TMR is not enabled. Running Jack's default microcontroller software for readout. DDR disabled. Full harness where each power input is appropriately designated. ADC input for one channel is 12 MHz with envelope of 3/4 full scale, with low analog gain on motherboard. Measurements taken from DCB Emulator board ADC",
 "relative": true,
 
 "reset": false,
@@ -28,23 +28,27 @@
 
 "adc1_save_data": true,
 "adc1_plot": true,
-"adc1_plot_show": true,
+"adc1_plot_show": false,
 "adc1_plot_save": true,
+"adc1_plot_overlay": false,
 
 "adc2_save_data": true,
 "adc2_plot": true,
-"adc2_plot_show": true,
+"adc2_plot_show": false,
 "adc2_plot_save": true,
+"adc2_plot_overlay": false,
 
 "adc3_save_data": true,
 "adc3_plot": true,
-"adc3_plot_show": true,
+"adc3_plot_show": false,
 "adc3_plot_save": true,
+"adc3_plot_overlay": false,
 
 "adc4_save_data": true,
 "adc4_plot": true,
 "adc4_plot_show": true,
 "adc4_plot_save": true,
+"adc4_plot_overlay": false,
 
 "pfb_averages": 10,
 "notch_filter": true,
@@ -91,17 +95,17 @@
 
 "pfb1_fpga_save_data": true,
 "pfb1_fpga_plot": true,
-"pfb1_fpga_plot_show": true,
+"pfb1_fpga_plot_show": false,
 "pfb1_fpga_plot_save": true,
 
 "pfb2_fpga_save_data": true,
 "pfb2_fpga_plot": true,
-"pfb2_fpga_plot_show": true,
+"pfb2_fpga_plot_show": false,
 "pfb2_fpga_plot_save": true,
 
 "pfb3_fpga_save_data": true,
 "pfb3_fpga_plot": true,
-"pfb3_fpga_plot_show": true,
+"pfb3_fpga_plot_show": false,
 "pfb3_fpga_plot_save": true,
 
 "pfb4_fpga_save_data": true,

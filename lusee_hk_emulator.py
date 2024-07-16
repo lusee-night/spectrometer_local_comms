@@ -56,8 +56,7 @@ class LuSEE_HK_EMULATOR:
     def check_i2c_status(self):
         time.sleep(0.1)
         val=self.connection.read_cdi_reg(self.i2c_dout_status)
-        print(hex(val & 0x40000000))
-        if (val & 0x40000000):
+        if (not (val & 0x40000000)):
             print (f'LuSEE_HK --> ADC not detected: {hex(val)}')
         print (f'LuSEE_HK --> ADC detected: {hex(val)}')
         return True
@@ -69,14 +68,10 @@ class LuSEE_HK_EMULATOR:
         self.connection.write_cdi_reg(self.i2c_address, i2c_address)
         self.connection.write_cdi_reg(self.i2c_din, i2c_data)
 
-        print(hex(self.connection.read_cdi_reg(self.i2c)))
-        print(hex(self.connection.read_cdi_reg(self.i2c_address)))
-
         #Start write operation
         self.connection.write_cdi_reg(self.i2c, 0x40000000 + reg20_val)
         time.sleep(0.1)
         #Stop write operation
-        print(hex(self.connection.read_cdi_reg(self.i2c)))
         self.connection.write_cdi_reg(self.i2c, reg20_val)
         time.sleep(0.1)
 
@@ -87,14 +82,10 @@ class LuSEE_HK_EMULATOR:
         self.connection.write_cdi_reg(self.i2c_address, i2c_address)
         time.sleep(0.1)
 
-        print(hex(self.connection.read_cdi_reg(self.i2c)))
-        print(hex(self.connection.read_cdi_reg(self.i2c_address)))
-
         #Start read operation
         self.connection.write_cdi_reg(self.i2c, 0x80000000 + reg20_val)
         time.sleep(0.1)
         #Stop read operation
-        print(hex(self.connection.read_cdi_reg(self.i2c)))
         self.connection.write_cdi_reg(self.i2c, reg20_val)
 
         time.sleep(0.1)
@@ -198,7 +189,6 @@ class LuSEE_HK_EMULATOR:
             return 0,0,0
         time.sleep(0.1)
         adc_ch0 = self.read_i2c(self.hk_adc_dev, 0x2, 0x80)
-        print(adc_ch0)
 
         return self.convert_adc(adc_ch0), 0, 0
 
