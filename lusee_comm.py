@@ -1,12 +1,14 @@
 import time
 from datetime import datetime
 from ethernet_comm import LuSEE_ETHERNET
+from tcp_comm import LuSEE_TCP
 
 class LuSEE_COMMS:
-    def __init__(self):
-        self.version = 1.13
+    def __init__(self, remote = False):
+        self.version = 1.14
 
-        self.connection = LuSEE_ETHERNET()
+        #self.connection = LuSEE_ETHERNET(remote)
+        self.connection = LuSEE_TCP
 
         self.pcb_fix = 0x002
         self.dcb_ts_1 = 0x020

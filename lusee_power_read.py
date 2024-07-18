@@ -10,14 +10,14 @@ from lusee_comm import LuSEE_COMMS
 from lusee_measure import LuSEE_MEASURE
 
 class LuSEE_POWER:
-    def __init__(self, emulator):
-        self.version = 1.01
+    def __init__(self, emulator, remote = False):
+        self.version = 1.02
         if (emulator):
-            self.hk = LuSEE_HK_EMULATOR()
+            self.hk = LuSEE_HK_EMULATOR(remote)
         else:
-            self.hk = LuSEE_HK()
+            self.hk = LuSEE_HK(remote)
         self.measure = LuSEE_MEASURE()
-        self.comm = LuSEE_COMMS()
+        self.comm = LuSEE_COMMS(remote)
         
         #Input voltages on cable, used for LDO power consumption
         self.cable_5p  = 5.5

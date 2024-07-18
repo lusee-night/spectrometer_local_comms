@@ -5,25 +5,17 @@ import csv
 import socket
 import binascii
 
-class LuSEE_ETHERNET:
+class LuSEE_TCP:
     def __init__(self, remote = False):
         self.version = 1.16
         self.PC_IP = "192.168.121.50"
 
-        if (remote):
-            self.SPECTROMETER_IP = "130.130.130.130"
-            self.SPECTROMETER_PORT = 80
-        else:
-            self.UDP_IP = "192.168.121.1"
-
-            self.udp_timeout = 1
-
-            self.FEMB_PORT_WREG = 32000
-            self.FEMB_PORT_RREG = 32001
-            self.FEMB_PORT_RREGRESP = 32002
-            self.PORT_HSDATA = 32003
-            self.PORT_HK = 32003
-            self.BUFFER_SIZE = 9014
+        self.DCB_IP = "localhost"
+        self.DCB_PORT = 65432
+        server_address = (self.DCB_IP, self.DCB_PORT)
+        self.sock_write = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock_write.connect(server_address)
+        self.BUFFER_SIZE = 9014
 
         self.KEY1 = 0xDEAD
         self.KEY2 = 0xBEEF
@@ -71,18 +63,6 @@ class LuSEE_ETHERNET:
         self.write_cdi_reg(self.latch_register, 0)
         time.sleep(self.wait_time)
 
-    def toggle_cdi_latch(self):
-        self.write_cdi_reg(self.latch_register, 1)
-        time.sleep(self.wait_time)
-        attempt = 0
-        while True:
-            if ((self.read_cdi_reg(self.latch_register)) >> 31):
-                break
-            else:
-                attempt += 1
-            if (attempt > 10):
-                sys.exit(f"Python Ethernet --> Error in writing to DCB emulator. Register 1 is {hex(self.read_cdi_reg(self.latch_register))}")
-
     def write_reg(self, reg, data):
         for i in range(10):
             if (i > 0):
@@ -94,19 +74,16 @@ class LuSEE_ETHERNET:
             dataValLSB = dataVal & 0xFFFF
 
             dataMSB = self.first_data_pack + dataValMSB
-            self.write_cdi_reg(self.write_register, dataMSB)
+            self.write_cdi_reg(dataMSB)
             time.sleep(self.wait_time)
-            self.toggle_cdi_latch()
 
             dataLSB = self.second_data_pack + dataValLSB
-            self.write_cdi_reg(self.write_register, dataLSB)
+            self.write_cdi_reg(dataLSB)
             time.sleep(self.wait_time)
-            self.toggle_cdi_latch()
 
             address_value = self.address_write + reg
-            self.write_cdi_reg(self.write_register, address_value)
+            self.write_cdi_reg(address_value)
             time.sleep(self.wait_time)
-            self.toggle_cdi_latch()
 
             time.sleep(self.wait_time * 10) #Some registers need a longer wait before reading back for some reason
             readback = self.read_reg(reg)
@@ -119,76 +96,56 @@ class LuSEE_ETHERNET:
 
     def read_reg(self, reg):
         address_value = self.address_read + reg
-        self.write_cdi_reg(self.write_register, address_value)
+        self.write_cdi_reg(address_value)
         time.sleep(self.wait_time)
-        self.toggle_cdi_latch()
 
         resp = self.read_cdi_reg(self.readback_register)
         return int(resp)
 
-    def write_cdi_reg(self, reg, data):
-        regVal = int(reg)
+    def write_cdi_reg(self, data):
         dataVal = int(data)
-        #Splits the register up, since both halves need to go through socket.htons seperately
-        dataValMSB = ((dataVal >> 16) & 0xFFFF)
+        dataValMSB = ((dataVal >> 16) & 0xFF)
         dataValLSB = dataVal & 0xFFFF
-        WRITE_MESSAGE = struct.pack('HHHHHHHHH',socket.htons( self.KEY1  ), socket.htons( self.KEY2 ),
-                                    socket.htons(regVal),socket.htons(dataValMSB),
-                                    socket.htons(dataValLSB),socket.htons( self.FOOTER ), 0x0, 0x0, 0x0  )
+        WRITE_MESSAGE = struct.pack('>BH', dataValMSB, dataValLSB)
+        print(f"Writing {WRITE_MESSAGE}")
 
-        #Set up socket for IPv4 and UDP, attach the correct PC IP
-        sock_write = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #sock_write = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Define the server address and port
+        #server_address = ("130.130.130.130", 10000)
+
+        # Connect the socket to the server
+        #sock_write.connect(server_address)
+
         try:
-            sock_write.bind((self.PC_IP, 0))
-        except:
-            print("IP: {}".format(self.PC_IP))
-        sock_write.sendto(WRITE_MESSAGE,(self.UDP_IP, self.FEMB_PORT_WREG ))
+            # Send data
+            #message = '"\A0\00\00"
+            self.sock_write.sendall(WRITE_MESSAGE)
 
-        #print ("Sent FEMB data from")
-        #print (sock_write.getsockname())
-        sock_write.close()
-        #print ("Python Ethernet --> Write: reg=%x,value=%x"%(reg,data))
-        #time.sleep(self.wait_time)
+            # data = sock_write.recv(1024)
+            # print('Received:', data.decode())
+        except:
+            print (f"Python Ethernet --> Couldn't write on {hex(reg)}, trying again...")
 
     #Read a full register from the FEMB FPGA.  Returns the 32 bits in an integer form
     def read_cdi_reg(self, reg):
         regVal = int(reg)
         for i in range(10):
-            #Set up listening socket before anything else - IPv4, UDP
-            sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
-            sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP ))
-            sock_readresp.settimeout(self.udp_timeout)
-
-            #First send a request to read out this sepecific register at the read request port for the board
-            READ_MESSAGE = struct.pack('HHHHHHHHH',socket.htons(self.KEY1), socket.htons(self.KEY2),socket.htons(regVal),0,0,socket.htons(self.FOOTER),0,0,0)
-            sock_read = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock_read.setblocking(0)
-            sock_read.bind((self.PC_IP, 0))
-            sock_read.sendto(READ_MESSAGE,(self.UDP_IP,self.FEMB_PORT_RREG))
-
-            #print ("Sent read request from")
-            #print (sock_read.getsockname())
-            sock_read.close()
-
             #try to receive response packet from board, store in hex
             data = []
             try:
-                data = sock_readresp.recv(self.BUFFER_SIZE)
+                data = self.sock_write.recv(self.BUFFER_SIZE)
             except socket.timeout:
                 if (i > 9):
                     print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
                     print ("Waited for CDI response on")
-                    print (sock_readresp.getsockname())
-                    sock_readresp.close()
+                    print (self.sock_write.getsockname())
                     return None
                 else:
                     print (f"Python Ethernet --> Didn't get a readback response for {hex(reg)}, trying again...")
 
             #print ("Waited for FEMB response on")
             #print (sock_readresp.getsockname())
-            sock_readresp.close()
             if (data != []):
                 break
 
@@ -200,12 +157,13 @@ class LuSEE_ETHERNET:
             #029012345678
             #The first 4 bits are the register you requested, the next 8 bits are the value
             #Looks for those first 4 bits to make sure you read the register you're looking for
-            if int(dataHex[0:4],16) != regVal :
+            if int(dataHex[20:24],16) != regVal :
                 print ("Python Ethernet --> Error read_cdi_reg: Invalid response packet")
+                print(dataHex)
                 return None
 
             #Return the data part of the response in integer form (it's just easier)
-            dataHexVal = int(dataHex[4:12],16)
+            dataHexVal = int(dataHex[24:32],16)
             #print ("FEMB_UDP--> Read: reg=%x,value=%x"%(reg,dataHexVal))
             return dataHexVal
         except TypeError:
@@ -274,18 +232,18 @@ class LuSEE_ETHERNET:
     def organize_header(self, formatted_data):
         header_dict = {}
 
-        header_dict["udp_packet_num"] = hex((formatted_data[0] << 16) + formatted_data[1])
-        header_dict["header_user_info"] = hex((formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5])
-        header_dict["system_status"] = hex((formatted_data[6] << 16) + formatted_data[7])
-        header_dict["message_id"] = hex(formatted_data[8] >> 10)
+        #header_dict["udp_packet_num"] = hex((formatted_data[0] << 16) + formatted_data[1])
+        #header_dict["header_user_info"] = hex((formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5])
+        #header_dict["system_status"] = hex((formatted_data[6] << 16) + formatted_data[7])
+        header_dict["message_id"] = hex(formatted_data[0] >> 10)
 
-        header_dict["message_spare"] = hex(formatted_data[9])
-        header_dict["ccsds_version"] = hex(formatted_data[10] >> 13)
-        header_dict["ccsds_packet_type"] = hex((formatted_data[10] >> 12) & 0x1)
-        header_dict["ccsds_secheaderflag"] = hex((formatted_data[10] >> 11) & 0x1)
-        header_dict["ccsds_appid"] = hex(formatted_data[10] & 0x7FF)
-        header_dict["ccsds_groupflags"] = hex(formatted_data[11] >> 14)
-        header_dict["ccsds_sequence_cnt"] = hex(formatted_data[11] & 0x3FFF)
+        header_dict["message_spare"] = hex(formatted_data[1])
+        header_dict["ccsds_version"] = hex(formatted_data[2] >> 13)
+        header_dict["ccsds_packet_type"] = hex((formatted_data[2] >> 12) & 0x1)
+        header_dict["ccsds_secheaderflag"] = hex((formatted_data[2] >> 11) & 0x1)
+        header_dict["ccsds_appid"] = hex(formatted_data[2] & 0x7FF)
+        header_dict["ccsds_groupflags"] = hex(formatted_data[3] >> 14)
+        header_dict["ccsds_sequence_cnt"] = hex(formatted_data[3] & 0x3FFF)
 
         return header_dict
 
@@ -515,7 +473,12 @@ class LuSEE_ETHERNET:
 if __name__ == "__main__":
     e = LuSEE_ETHERNET(remote = True)
     while (True):
-        cdi_command = input("Insert your CDI command in hex\n")
-        hex_integer = int(cdi_command, 16)
-        e.send_bootloader_message(hex_integer)
+        # cdi_command = input("Insert your CDI command in hex\n")
+        # hex_integer = int(cdi_command, 16)
+        # e.write_cdi_reg(hex_integer)
+        # print(f"Wrote CDI command: {hex(hex_integer)}")
+
+        reg_read = input("Which register to read?\n")
+        hex_integer = int(reg_read, 16)
+        e.read_reg(hex_integer)
         print(f"Wrote CDI command: {hex(hex_integer)}")

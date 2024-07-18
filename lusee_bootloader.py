@@ -4,9 +4,9 @@ import sys
 from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_BOOTLOADER:
-    def __init__(self):
-        self.version = 1.00
-        self.connection = LuSEE_ETHERNET()
+    def __init__(self, remote = False):
+        self.version = 1.01
+        self.connection = LuSEE_ETHERNET(remote)
         self.name = "LuSEE Bootloader --> "
         self.debug_file = "lusee_bootloader_operations.txt"
 

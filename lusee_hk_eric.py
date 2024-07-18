@@ -7,11 +7,10 @@ from lusee_comm import LuSEE_COMMS
 from ethernet_comm import LuSEE_ETHERNET
 
 class LuSEE_HK:
-    def __init__(self):
-        self.version = 1.01
+    def __init__(self, remote = False):
+        self.version = 1.02
         #self.lusee = LuSEE_COMMON()
-        self.comm        = LuSEE_COMMS()
-        self.connection  = LuSEE_ETHERNET()
+        self.connection  = LuSEE_ETHERNET(remote)
         self.tvs_cntl    = 0x004
         self.tvs_1_0v    = 0x005
         self.tvs_1_8v    = 0x006
