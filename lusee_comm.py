@@ -329,7 +329,10 @@ class LuSEE_COMMS:
         self.connection.write_reg(self.adc_max_threshold, int(adc_max))
 
     def set_sticky_error(self, sticky):
-        self.connection.write_reg(self.error_stick, int(sticky))
+        if (sticky):
+            self.connection.write_reg(self.error_stick, 0xF)
+        else:
+            self.connection.write_reg(self.error_stick, 0)
 
     def set_cal_sticky_error(self, sticky):
         self.connection.write_reg(self.cal_error_stick, int(sticky))
@@ -499,7 +502,7 @@ class LuSEE_COMMS:
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         time.sleep(self.cycle_time * (2**self.avg))
-
+        self.get_spec_errors()
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
@@ -585,9 +588,10 @@ class LuSEE_COMMS:
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
         self.connection.write_reg(self.scratchpad_2, 3)
+        #input("reset?")
         self.connection.write_reg(self.scratchpad_2, 1)
-        time.sleep(1)
-        self.connection.write_reg(self.scratchpad_2, 0)
+        # time.sleep(1)
+        # self.connection.write_reg(self.scratchpad_2, 0)
 
         #Resets the CDI output FIFOs
         self.connection.write_reg(self.fifo_rst, 1)
@@ -613,6 +617,7 @@ class LuSEE_COMMS:
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
         time.sleep(wait_time)
+        self.get_spec_errors()
         self.get_calib_errors()
 
         #Stop sending spectrometer data to microcontroller
@@ -688,6 +693,11 @@ class LuSEE_COMMS:
 
     def get_calib_errors(self):
         for i in range(0x81c, 0x83B+1):
+            print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
+
+    def get_spec_errors(self):
+        print(f"Register 0x432 is {hex(self.connection.read_reg(0x432))}")
+        for i in range(0x460, 0x46F+1):
             print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
 
     def set_chan_gain(self, ch, in1, in2, gain):

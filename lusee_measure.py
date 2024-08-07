@@ -83,9 +83,9 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x851, 2046)
 
         #Choose frequency bin
-        self.comm.connection.write_reg(0x84F, 0)
+        self.comm.connection.write_reg(0x84F, 102)
         self.comm.connection.write_reg(0x850, 511)
-        self.comm.connection.write_reg(0x214, 8)
+        self.comm.connection.write_reg(0x214, 0)
 
         if (self.json_data[f"pretest"]):
             self.spectrometer_simple()
@@ -101,6 +101,7 @@ class LuSEE_MEASURE:
 
         with open(self.json_output_file, 'w', encoding='utf-8') as f:
             json.dump(self.datastore, f, ensure_ascii=False, indent=4, default=str)
+
         self.plotter = LuSEE_PLOTTING(self.results_path)
 
         self.comm.readout_mode("sw")
@@ -151,6 +152,7 @@ class LuSEE_MEASURE:
         for i in range(1, 5):
             if (self.json_data[f"pfb{i}_fpga_save_data"]):
                 self.comm.set_function(f"FFT{i}")
+                # while(True):
                 data, header = self.comm.get_pfb_data(header = True)
                 pfb_dict = {"header": header,
                             "data": data}
@@ -158,7 +160,15 @@ class LuSEE_MEASURE:
                     json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
 
                 if (self.json_data[f"pfb{i}_fpga_plot"]):
-                    self.plotter.plot_pfb_fpga(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
+                    self.plotter.plot_notches(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
+
+                    # self.comm.stop_spectrometer()
+                    # input("Next?")
+                    #
+                    # self.comm.start_spectrometer()
+                    # time.sleep(.1)
+                    # self.comm.load_fft_fifos()
+                    # time.sleep(1)
 
                 #self.plotter.plot_notches(i, True, True)
 

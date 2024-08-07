@@ -358,7 +358,7 @@ class LuSEE_POWER:
             #The ADC4 channel measures the voltage after going through a 1/2 voltage divider, anticipating having to read any higher voltages than the ADC reference
             #temp is the ADC's internal temperature, probably not useful
             adc0, adc4, temp = self.hk.read_hk_data()
-            #print(f"ADC0 is {adc0} and ADC4 {adc4}")
+            print(f"Raw ADC0 is {adc0} and ADC4 {adc4}")
 
             #Correction needs to be applied because of the losses along the multiplexer chain
             adc0 = adc0 / self.correction[key]
@@ -414,7 +414,7 @@ class LuSEE_POWER:
                 running_list.extend([adc0, p, p_ldo])
             else:
                 running_list.extend([adc0])
-            #input("Is this ok?")
+            input("Is this ok?")
         #With the full column, we can now add it to the Pandas Dataframe with the configuration title
         #print(self.df)
         #print(running_list)
@@ -465,6 +465,6 @@ if __name__ == "__main__":
         else:
             sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
 
-    power = LuSEE_POWER()
+    power = LuSEE_POWER(emulator)
     power.sequence(config_file)
     print("Finished!")
