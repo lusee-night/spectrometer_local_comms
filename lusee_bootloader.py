@@ -49,14 +49,13 @@ class LuSEE_BOOTLOADER:
         #Send reset microcontroller packet
         resp = self.connection.send_bootloader_message_response(self.connection.RESET_UC)
         self.write_to_file(resp)
-        # if (int(resp[0]['BL_Message'], 16) == self.connection.BL_RESET):
-        #     print(f"{self.name}Microcontroller reset")
-        # else:
-        #     sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
+        if (int(resp[0]['BL_Message'], 16) == self.connection.BL_RESET):
+            print(f"{self.name}Microcontroller reset")
+        else:
+            sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
         #Send remain in bootloader message
-        self.connection.send_bootloader_message(self.REMAIN)
+        self.remain()
 
-    #NOT IMPLEMENTED IN BOOTLOADER YET
     def remain(self):
         self.connection.send_bootloader_message(self.REMAIN)
 
@@ -81,7 +80,6 @@ class LuSEE_BOOTLOADER:
         #print(resp)
 
     #Reads back the program, the full hex file for a comparison
-    #NOT IMPLEMENTED YET
     def read_loaded_program(self):
         print("This function is not implemented yet")
         resp = self.connection.send_bootloader_message_response(self.connection.SEND_PROGRAM_TO_DCB)
@@ -240,15 +238,15 @@ if __name__ == "__main__":
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
     boot.init_bootloader()
-    #time.sleep(0.1)
+    time.sleep(0.1)
     #boot.remain()
-    #boot.get_program_info()
-    #boot.load_region(region = 1)
-    #boot.get_program_info()
-    #boot.read_loaded_program()
+    boot.get_program_info()
+    boot.load_region(region = 1)
+    boot.get_program_info()
+    boot.read_loaded_program()
     #boot.ddr_quick_test()
 
-    boot.file_path = sys.argv[1]
-    boot.delete_region(region = 1)
-    boot.write_hex_bootloader(region = 1)
+    # boot.file_path = sys.argv[1]
+    # boot.delete_region(region = 1)
+    # boot.write_hex_bootloader(region = 1)
     boot.launch_software()

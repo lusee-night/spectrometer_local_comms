@@ -17,7 +17,7 @@ class LuSEE_ETHERNET:
         self.FEMB_PORT_RREG = 32001
         self.FEMB_PORT_RREGRESP = 32002
         self.PORT_HSDATA = 32003
-        self.PORT_HK = 32003
+        self.PORT_HK = 32004
         self.BUFFER_SIZE = 9014
 
         self.KEY1 = 0xDEAD
@@ -411,7 +411,7 @@ class LuSEE_ETHERNET:
         sock_readresp.close()
 
         if (keep_listening):
-            self.unpack_hex_readback(data)
+            return self.unpack_hex_readback(data)
         else:
             try:
                 unpacked = self.check_data_bootloader(data)
@@ -426,13 +426,11 @@ class LuSEE_ETHERNET:
         header_dict = {}
         num = 0
         for i in data:
-            print(num)
             num += 1
             unpack_buffer = int((len(i))/2)
             #Unpacking into shorts in increments of 2 bytes
             formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
             header_dict[num] = self.organize_header(formatted_data)
-
             #The header is 13 bytes (26 hex byte characters) and the payload starts after as 32 bit ints
             data_packet.extend(i[26:])
 
@@ -441,7 +439,7 @@ class LuSEE_ETHERNET:
         #But the payload is reversed 2 bytes by 2 bytes
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         fm3 = [hex(i) for i in formatted_data3]
-        print(fm3)
+        #print(fm3)
         #With the formatted payload, get all relevant info
         bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
 
