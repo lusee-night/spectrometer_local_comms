@@ -1,7 +1,7 @@
 import time
 import os
 import sys
-from ethernet_comm import LuSEE_ETHERNET
+from utils import LuSEE_ETHERNET
 
 class LuSEE_BOOTLOADER:
     def __init__(self):

@@ -1,6 +1,6 @@
 import time
 from datetime import datetime
-from ethernet_comm import LuSEE_ETHERNET
+from utils import LuSEE_ETHERNET
 
 class LuSEE_COMMS:
     def __init__(self):

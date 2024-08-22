@@ -3,10 +3,10 @@ import os, time, sys, socket, math
 import numpy as np
 
 #from lusee_common import LuSEE_COMMON
-from lusee_comm import LuSEE_COMMS
-from ethernet_comm import LuSEE_ETHERNET
+from utils import LuSEE_COMMS
+from utils import LuSEE_ETHERNET
 
-class LuSEE_HK:
+class LuSEE_HK_EMULATOR:
     def __init__(self):
         self.version = 1.01
         #self.lusee = LuSEE_COMMON()
@@ -18,12 +18,12 @@ class LuSEE_HK:
         self.tvs_2_5v    = 0x007
         self.tvs_temp    = 0x008
 
-        self.i2c_strb    = 0x010
-        self.i2c_num_bytes = 0x011
-        self.i2c_dev_addr = 0x012
-        self.i2c_address = 0x013
-        self.i2c_din     = 0x014
-        self.i2c_dout_status = 0x015
+        self.mux         = 0x06
+
+        self.i2c         = 20
+        self.i2c_address = 21
+        self.i2c_din     = 22
+        self.i2c_dout_status = 23
 
         #Current monitor
         #https://www.ti.com/lit/ds/symlink/ina901-sp.pdf
@@ -43,86 +43,55 @@ class LuSEE_HK:
                                   0.06831: [3.3539264E-03, 2.5609446E-04, 1.9621987E-06, 4.6045930E-08],
                                   0.01872: [3.3368620E-03, 2.4057263E-04, -2.6687093E-06, -4.0719355E-07]}
 
-        #Device addresses for chips on the DB44 adapter board
-        #https://www.nxp.com/docs/en/data-sheet/PCAL6416A.pdf
-        self.hk_mux_dev = 0x20
-        #https://www.ti.com/lit/ds/symlink/adc128d818.pdf
-        self.hk_adc_dev = 0x1D
-
-    def init_i2c_mux(self):
-        #Sets all Port 0 pins to be outputs
-        self.write_i2c(self.hk_mux_dev, 0x2, 0x6, 0x0)
-
-    def reset_i2c_adc(self):
-        #Sets to a reset state
-        self.write_i2c(self.hk_adc_dev, 0x1, 0x0, 0x80)
-
-    def init_i2c_adc(self):
-        #Long sequence copied from Jack's Labview
-        self.reset_i2c_adc()
-        #Disables channels 1,3,5 and 6, which are unused
-        self.write_i2c(self.hk_adc_dev, 0x1, 0x8, 0x6A)
-        #Sets continuous conversion mode, rather than low-power
-        self.write_i2c(self.hk_adc_dev, 0x1, 0x7, 0x01)
-        #Uses internal VREF and sets to ADC Mode 0, each channel is the direct input with temperature monitoring
-        self.write_i2c(self.hk_adc_dev, 0x1, 0xB, 0x01)
+        #Device address AD7998BRUZ-1REEL
+        #https://www.analog.com/media/en/technical-documentation/data-sheets/AD7997_7998.pdf
+        self.hk_adc_dev = 0x23
 
     def write_i2c_mux(self, val):
         #Val is simply the 8 bit output of Port 0, bit 0 is P0_0 and so on
-        self.write_i2c(self.hk_mux_dev, 0x2, 0x2, val)
-        resp = self.read_i2c(self.hk_mux_dev, 0x2, 0x2)
-        if (resp == val):
-            print(f"I2C mux written to {resp:x}")
-            return 0
-        else:
-            print(f"Error: I2C mux was supposed to be written to {val:x}, but was read back as {resp:x}")
-            return 1
+        self.connection.write_cdi_reg(self.mux, val)
+        time.sleep(0.1)
+        return 0
 
     def check_i2c_status(self):
-        while True:
-            val=self.connection.read_reg(self.i2c_dout_status)
-            if (((val>>16)&0x1)==1):
-                print (f'LuSEE_HK --> Core busy: {hex(val)}')
-                time.sleep (1.01)
-            # elif (((val>>17)&0x1)==1):
-            #     print (f'LuSEE_HK --> Device Unavailable: {hex(val)}')
-            #     time.sleep (1.01)
-            else:
-                break
+        time.sleep(0.1)
+        val=self.connection.read_cdi_reg(self.i2c_dout_status)
+        if (not (val & 0x40000000)):
+            print (f'LuSEE_HK --> ADC not detected: {hex(val)}')
+        print (f'LuSEE_HK --> ADC detected: {hex(val)}')
+        return True
 
     def write_i2c(self, dev_address, num_bytes, i2c_address, i2c_data):
-        #Make sure I2C state machine is idle
-        self.check_i2c_status()
-
         #Prepare write operation with all parameters
-        self.connection.write_reg(self.i2c_num_bytes, num_bytes & 0xF)
-        self.connection.write_reg(self.i2c_dev_addr, dev_address & 0x7F)
-        self.connection.write_reg(self.i2c_address, i2c_address & 0xFF)
-        self.connection.write_reg(self.i2c_din, i2c_data)
+        reg20_val = (dev_address << 16) + num_bytes
+        self.connection.write_cdi_reg(self.i2c, reg20_val)
+        self.connection.write_cdi_reg(self.i2c_address, i2c_address)
+        self.connection.write_cdi_reg(self.i2c_din, i2c_data)
 
         #Start write operation
-        self.connection.write_reg(self.i2c_strb, 1)
+        self.connection.write_cdi_reg(self.i2c, 0x40000000 + reg20_val)
+        time.sleep(0.1)
         #Stop write operation
-        self.connection.write_reg(self.i2c_strb, 0)
+        self.connection.write_cdi_reg(self.i2c, reg20_val)
+        time.sleep(0.1)
 
     def read_i2c(self, dev_address, num_bytes, i2c_address):
-        #Make sure I2C state machine is idle
-        self.check_i2c_status()
-        #Mux chip requires this first
-        self.write_i2c(dev_address, 0x0, i2c_address, 0x0)
-        self.check_i2c_status()
-
         #Prepare write operation
-        self.connection.write_reg(self.i2c_num_bytes, num_bytes & 0xF)
-        self.connection.write_reg(self.i2c_dev_addr, dev_address & 0x7F)
-        self.connection.write_reg(self.i2c_address, i2c_address & 0xFF)
+        reg20_val = (dev_address << 16) + num_bytes
+        self.connection.write_cdi_reg(self.i2c, reg20_val)
+        self.connection.write_cdi_reg(self.i2c_address, i2c_address)
+        time.sleep(0.1)
 
         #Start read operation
-        self.connection.write_reg(self.i2c_strb, 2)
+        self.connection.write_cdi_reg(self.i2c, 0x80000000 + reg20_val)
+        time.sleep(0.1)
         #Stop read operation
-        self.connection.write_reg(self.i2c_strb, 0)
+        self.connection.write_cdi_reg(self.i2c, reg20_val)
+
+        time.sleep(0.1)
+
         #FPGA bottom 2 bytes are the actual data
-        return self.connection.read_reg(self.i2c_dout_status) & 0xFFFF
+        return self.connection.read_cdi_reg(self.i2c_dout_status) & 0xFFFF
 
     def setup_fpga_internal(self):
         self.connection.write_reg(self.tvs_cntl, 0xFF)
@@ -163,13 +132,10 @@ class LuSEE_HK:
             return number
 
     def convert_adc(self, val):
-        part1 = val & 0xFF
         total = ((val & 0xFF) << 8) + (val >> 8)
-        #0.000625
-        #Measured VREF is 3.323 V
         #Bits is 4096
         #Don't know why we divide by 16, for bit shift?
-        return (total * (3.323/4096))/16
+        return (total * (3.3/4096))
 
     #The INA901 reads the voltage across a sense resistor to measure the current
     #It has an internal gain of 20V/V, so first we get the actual voltage across the resistor
@@ -210,24 +176,21 @@ class LuSEE_HK:
         return int(1/term), 0
 
     def read_hk_data(self):
-        #Do a single shot conversion
-        self.write_i2c(self.hk_adc_dev, 0x1, 0x9, 0x01)
-        time.sleep(0.025)
-        #Turn off single shot conversion
-        self.write_i2c(self.hk_adc_dev, 0x0, 0x9, 0x00)
+        #Device address is 0x23, num_bytes is 0, address and data is 0x80 to
+        #First device address and num bytes to register 20, adress
+        #Then read 0x23, num_bytes 2, address is 0 or don't change, toggle reg20 MSB, wait 1 ms, read reg23. Which is 32 bit value. the 16 bit LSB is the data, but byteswapped, and upper nibble is channel so mask it
+        #scale is 3.3/4096
 
-        adc_ch0 = self.read_i2c(self.hk_adc_dev, 0x2, 0x20)
+        #Set ADC to read channel 0
+        self.write_i2c(self.hk_adc_dev, 0x0, 0x80, 0x0)
+        #Make sure we have the right device address
+        time.sleep(0.1)
+        if (not self.check_i2c_status()):
+            return 0,0,0
+        time.sleep(0.1)
+        adc_ch0 = self.read_i2c(self.hk_adc_dev, 0x2, 0x80)
 
-        #Do a single shot conversion
-        self.write_i2c(self.hk_adc_dev, 0x1, 0x9, 0x01)
-        time.sleep(0.025)
-        #Turn off single shot conversion
-        self.write_i2c(self.hk_adc_dev, 0x0, 0x9, 0x00)
-
-        adc_ch4 = self.read_i2c(self.hk_adc_dev, 0x2, 0x24)
-        temp = self.read_i2c(self.hk_adc_dev, 0x2, 0x27)
-
-        return self.convert_adc(adc_ch0), self.convert_adc(adc_ch4), self.convert_adc(temp)
+        return self.convert_adc(adc_ch0), 0, 0
 
 if __name__ == "__main__":
     #arg = sys.argv[1]

@@ -4,9 +4,9 @@ import sys
 import pandas as pd
 import json
 
-from lusee_hk_eric import LuSEE_HK
-from lusee_hk_emulator import LuSEE_HK_EMULATOR
-from lusee_comm import LuSEE_COMMS
+from utils import LuSEE_HK
+from utils import LuSEE_HK_EMULATOR
+from utils import LuSEE_COMMS
 from lusee_measure import LuSEE_MEASURE
 
 class LuSEE_POWER:
@@ -414,7 +414,7 @@ class LuSEE_POWER:
                 running_list.extend([adc0, p, p_ldo])
             else:
                 running_list.extend([adc0])
-            input("Is this ok?")
+            #input("Is this ok?")
         #With the full column, we can now add it to the Pandas Dataframe with the configuration title
         #print(self.df)
         #print(running_list)

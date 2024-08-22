@@ -5,13 +5,14 @@ import math
 import time
 from datetime import datetime
 
-from lusee_comm import LuSEE_COMMS
-from lusee_plotting import LuSEE_PLOTTING
+from utils import LuSEE_COMMS
+from utils import LuSEE_PLOTTING
 
 class LuSEE_MEASURE:
     def __init__(self):
         self.version = 1.12
         self.comm = LuSEE_COMMS()
+        self.output_dir = "output"
         self.prefix = "LuSEE Measure --> "
         self.tick_size = 22
         self.title_size = 32
@@ -160,7 +161,8 @@ class LuSEE_MEASURE:
                     json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
 
                 if (self.json_data[f"pfb{i}_fpga_plot"]):
-                    self.plotter.plot_notches(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
+                    self.plotter.plot_pfb_fpga(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
+                    #self.plotter.plot_notches(i, self.json_data[f"pfb{i}_fpga_plot_show"], self.json_data[f"pfb{i}_fpga_plot_save"])
 
                     # self.comm.stop_spectrometer()
                     # input("Next?")
@@ -279,7 +281,8 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
 
         self.comm.set_cal_sticky_error(self.json_data["sticky_errors"])
-
+        for i in range(0x863, 0x883):
+            self.comm.connection.write_reg(i, 0)
         #Overwrite a stable notch value
         self.comm.connection.write_reg(0x844, 0)
         self.comm.connection.write_reg(0x845, 2)
@@ -397,9 +400,9 @@ class LuSEE_MEASURE:
         self.datastore.update(self.comm.get_firmware_version())
 
         if (self.json_data["relative"] == True):
-            output_path = os.path.abspath(self.json_data["output_directory"])
+            output_path = os.path.abspath(os.path.join(self.output_dir, self.json_data["output_directory"]))
         else:
-            output_path = os.path.normpath(self.json_data["output_directory"])
+            output_path = os.path.normpath(os.path.join(self.output_dir, self.json_data["output_directory"]))
 
         json_date = datetime.today().strftime('%Y%m%d%H%M%S')
         os.makedirs(os.path.join(output_path, json_date))
