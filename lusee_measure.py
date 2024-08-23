@@ -376,11 +376,11 @@ class LuSEE_MEASURE:
             antenna_enable = int(self.json_data["antenna_enable"], 16),
             power_slice = int(self.json_data["power_slice"], 16),
             fdsd_slice = int(self.json_data["fdsd_slice"], 16),
-            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16),
-            restrict_frequency = self.json_data["limit_frequency"],
-            lower_frequency = self.json_data["lower_frequency"],
-            upper_frequency = self.json_data["upper_frequency"]
+            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16)
             )
+
+        for i in range(64):
+            self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
 
     def calibrator_reset(self):
         self.comm.reset_calibrator_formatter()

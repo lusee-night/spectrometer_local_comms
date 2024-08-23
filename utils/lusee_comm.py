@@ -112,10 +112,8 @@ class LuSEE_COMMS:
         self.CF_TST_Mode_En = 0x815
         self.CF_start_ADDR = 0x816
         self.cal_enable = 0x83C
-        self.restrict_frequency = 0x841
-        self.lower_frequency = 0x842
-        self.upper_frequency = 0x843
         self.debug_fifo_used = 0x852
+        self.weight_base = 0x853
 
         self.readout_modes = {
             "FFT1": 0,
@@ -729,7 +727,7 @@ class LuSEE_COMMS:
 
     def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,
                          driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable,
-                         power_slice, fdsd_slice, fdxsdx_slice, restrict_frequency, lower_frequency, upper_frequency):
+                         power_slice, fdsd_slice, fdxsdx_slice):
 
         self.connection.write_reg(self.Nac1, Nac1)
         self.connection.write_reg(self.Nac2, Nac2)
@@ -754,9 +752,9 @@ class LuSEE_COMMS:
         self.connection.write_reg(0x83E, fdsd_slice)
         self.connection.write_reg(0x83F, fdxsdx_slice)
 
-        self.connection.write_reg(self.restrict_frequency, restrict_frequency)
-        self.connection.write_reg(self.lower_frequency, lower_frequency)
-        self.connection.write_reg(self.upper_frequency, upper_frequency)
+    def apply_weight(self, weight, val):
+        weight_register = self.weight_base + weight
+        self.connection.write_reg(weight_register, val)
 
     def get_adc_stats(self, num, high, low):
         self.connection.write_reg(self.adc_stat_clr, 1)

@@ -93,9 +93,8 @@ The `lusee_measure.py` and `lusee_power_read.py` functionality uses configuratio
 "fdxsdx_slice": "Value for register 0x83F in hex format"
 "hold_drift": "true or false for register 0x840"
 
-"limit_frequency": "true or false for register 0x841"
-"lower_frequency": "Integer value for register 0x842"
-"upper_frequency": "Integer value for register 0x843"
+"weight0": "Value for the equivalent weight in register 0x853 in hex format"
+"Similar for weights 1-63"
 
 "print_calib": "true or false to print out all calibration values (27 parameters with 2048 values each) in the command line. Used for debugging"
 "calib_fout_plot": "true or false to make a plot of Fout_real/image 1-4"
