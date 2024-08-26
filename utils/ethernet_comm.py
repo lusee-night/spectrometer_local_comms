@@ -4,6 +4,7 @@ import struct
 import csv
 import socket
 import binascii
+from datetime import datetime
 
 class LuSEE_ETHERNET:
     def __init__(self):
@@ -405,7 +406,7 @@ class LuSEE_ETHERNET:
                     print (sock_readresp.getsockname())
                     return None
                 else:
-                    print("Packets stopped coming")
+                    #print("Packets stopped coming")
                     break
                 sock_readresp.close()
         sock_readresp.close()
@@ -418,30 +419,33 @@ class LuSEE_ETHERNET:
                 return unpacked
             except TypeError as e:
                 print(e)
-                print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
+                print (f"Python Ethernet --> Error trying to parse CDI housekeeping readback. Data was {data}")
 
     #Not implemented/finished yet because this function is still under construction in the bootloader
     def unpack_hex_readback(self, data):
-        data_packet = bytearray()
         header_dict = {}
+        bootloader_dict = {}
         num = 0
         for i in data:
-            num += 1
             unpack_buffer = int((len(i))/2)
             #Unpacking into shorts in increments of 2 bytes
             formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
             header_dict[num] = self.organize_header(formatted_data)
             #The header is 13 bytes (26 hex byte characters) and the payload starts after as 32 bit ints
-            data_packet.extend(i[26:])
+            pkt = bytearray()
+            pkt.extend(i[26:])
 
-        data_size = int(len(data_packet)/4)
-        formatted_data2 = struct.unpack_from(f">{data_size}I",data_packet)
-        #But the payload is reversed 2 bytes by 2 bytes
-        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
-        fm3 = [hex(i) for i in formatted_data3]
-        #print(fm3)
-        #With the formatted payload, get all relevant info
-        bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
+            data_size = int(len(pkt)/4)
+            formatted_data2 = struct.unpack_from(f">{data_size}I",pkt)
+            #But the payload is reversed 2 bytes by 2 bytes
+            formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+            #fm3 = [hex(i) for i in formatted_data3]
+            #print(fm3)
+            #With the formatted payload, get all relevant info
+            bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
+            bootloader_dict[num] = bootloader_resp
+            num += 1
+        return header_dict, bootloader_dict
 
     #The bootloader response has the standard CDI header, so that's formatted
     #And the payload is sent for further processing
@@ -476,16 +480,43 @@ class LuSEE_ETHERNET:
         bootloader_dict['BL_Message'] = hex(packet[0])
         bootloader_dict['BL_count'] = hex(packet[1])
         bootloader_dict['BL_timestamp'] = hex((packet[3] << 32) + packet[2])
+
+        date_string = format(packet[4], 'x')
+        time_string = format(packet[5], 'x')
+        year = int(date_string[:4])
+        month = int(date_string[4:6])
+        day = int(date_string[6:])
+        hour = int(time_string[:2])
+        minute = int(time_string[2:4])
+        second = int(time_string[4:6])
+        datetime_object = datetime(year = year, month = month, day = day, hour = hour, minute = minute, second = second)
+        bootloader_dict['BL_datetime'] = datetime_object
+        formatted_data = datetime_object.strftime("%B %d, %Y %I:%M:%S %p")
+        bootloader_dict['BL_formatted_datetime'] = formatted_data
+
+        bootloader_dict['BL_version'] = hex(packet[6])
         bootloader_dict['BL_end'] = hex(packet[7])
 
+        if (packet[0] == 0):
+            pass
         if (packet[0] == 1):
             resp = self.unpack_program_jump(packet[8:])
             bootloader_dict.update(resp)
         elif (packet[0] == 2):
             resp = self.unpack_program_info(packet[8:])
             bootloader_dict.update(resp)
+        elif (packet[0] == 3):
+            resp = self.unpack_program_readback(packet[8:])
+            bootloader_dict.update(resp)
 
         return bootloader_dict
+
+    #This is the format for the response packet when the client requested to jump into the loaded program
+    def unpack_program_jump(self, packet):
+        program_info_dict = {}
+        program_info_dict["region_jumped_to"] = hex(packet[0])
+        program_info_dict["default_vals_loaded"] = packet[1]
+        return program_info_dict
 
     #This is the format for the response packet when the client requested program info
     def unpack_program_info(self, packet):
@@ -498,12 +529,18 @@ class LuSEE_ETHERNET:
         program_info_dict["Loaded_program_checksum"] = hex(packet[19])
         return program_info_dict
 
-    #This is the format for the response packet when the client requested to jump into the loaded program
-    def unpack_program_jump(self, packet):
-        program_info_dict = {}
-        program_info_dict["region_jumped_to"] = hex(packet[0])
-        program_info_dict["default_vals_loaded"] = packet[1]
-        return program_info_dict
+    #This is the format for the packets coming in that are reading out the loaded softare in flash memory
+    def unpack_program_readback(self, packet):
+        bootloader_start_dict = {}
+        data = []
+        line = ""
+        for num,i in enumerate(packet):
+            segment = f"{i:08x}"
+            data.append(segment)
+
+        bootloader_start_dict["data"] = data
+        bootloader_start_dict["lines"] = len(data)
+        return bootloader_start_dict
 
 if __name__ == "__main__":
     arg = sys.argv[1]

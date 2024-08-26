@@ -81,9 +81,16 @@ class LuSEE_BOOTLOADER:
 
     #Reads back the program, the full hex file for a comparison
     def read_loaded_program(self):
-        print("This function is not implemented yet")
-        resp = self.connection.send_bootloader_message_response(self.connection.SEND_PROGRAM_TO_DCB)
-        print(resp)
+        header, bootloader = self.connection.send_bootloader_message_response(self.connection.SEND_PROGRAM_TO_DCB)
+        lines_per_file = bootloader[0]['lines']
+        orig = self.open_file()
+        for i in range(len(orig)):
+            index = i//lines_per_file
+            num = i%lines_per_file
+            readback_line = bootloader[index]['data'][num]
+            if (orig[i] != int(readback_line, 16)):
+                print(f"Error in reading back program. Comparing to f{self.file_path}. Line {i} in file is {hex(orig[i])}. In readback, it's {readback_line}")
+        print("Comparison Complete")
 
     #Deletes the default settings that were used for bootup in the memory. Does not get a confirmation packet
     def delete_spectrometer_defaults(self):
@@ -241,12 +248,13 @@ if __name__ == "__main__":
     time.sleep(0.1)
     #boot.remain()
     boot.get_program_info()
-    boot.load_region(region = 1)
+    boot.load_region(region = 2)
     boot.get_program_info()
+    boot.file_path = sys.argv[1]
     boot.read_loaded_program()
     #boot.ddr_quick_test()
 
-    # boot.file_path = sys.argv[1]
+
     # boot.delete_region(region = 1)
-    # boot.write_hex_bootloader(region = 1)
+    # boot.write_hex_bootloader(region = 2)
     boot.launch_software()
