@@ -4,6 +4,9 @@ import struct
 import csv
 import socket
 import binascii
+import threading
+import queue
+from datetime import datetime
 
 class LuSEE_ETHERNET:
     def __init__(self):
@@ -53,6 +56,9 @@ class LuSEE_ETHERNET:
         self.BL_PROGRAM_CHECK = 0x2
         self.BL_PROGRAM_VERIFY = 0x3
 
+        self.data_queue = queue.Queue()
+        self.stop_event = threading.Event()
+
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
         self.write_reg(self.spectrometer_reset,1)
@@ -70,13 +76,13 @@ class LuSEE_ETHERNET:
         self.write_cdi_reg(self.latch_register, 1)
         time.sleep(self.wait_time)
         attempt = 0
-        while True:
-            if ((self.read_cdi_reg(self.latch_register)) >> 31):
-                break
-            else:
-                attempt += 1
-            if (attempt > 10):
-                sys.exit(f"Python Ethernet --> Error in writing to DCB emulator. Register 1 is {hex(self.read_cdi_reg(self.latch_register))}")
+        # while True:
+        #     if ((self.read_cdi_reg(self.latch_register)) >> 31):
+        #         break
+        #     else:
+        #         attempt += 1
+        #     if (attempt > 10):
+        #         sys.exit(f"Python Ethernet --> Error in writing to DCB emulator. Register 1 is {hex(self.read_cdi_reg(self.latch_register))}")
 
     def write_reg(self, reg, data):
         for i in range(10):
@@ -104,13 +110,15 @@ class LuSEE_ETHERNET:
             self.toggle_cdi_latch()
 
             time.sleep(self.wait_time * 10) #Some registers need a longer wait before reading back for some reason
-            readback = self.read_reg(reg)
-            if (readback == data):
-                break
-            elif (reg in self.exception_registers):
-                break
-            else:
-                print(f"Python Ethernet --> Tried to write {hex(data)} to register {hex(reg)} but read back {hex(readback)}")
+            print("tim eot read")
+            self.read_reg(reg)
+            break
+            #if (readback == data):
+            #    break
+            #elif (reg in self.exception_registers):
+            #    break
+            #else:
+            #    print(f"Python Ethernet --> Tried to write {hex(data)} to register {hex(reg)} but read back {hex(readback)}")
 
     def read_reg(self, reg):
         address_value = self.address_read + reg
@@ -118,8 +126,8 @@ class LuSEE_ETHERNET:
         time.sleep(self.wait_time)
         self.toggle_cdi_latch()
 
-        resp = self.read_cdi_reg(self.readback_register)
-        return int(resp)
+        self.read_cdi_reg(self.readback_register)
+        #return int(resp)
 
     def write_cdi_reg(self, reg, data):
         regVal = int(reg)
@@ -150,11 +158,7 @@ class LuSEE_ETHERNET:
         regVal = int(reg)
         for i in range(10):
             #Set up listening socket before anything else - IPv4, UDP
-            sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
-            sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP ))
-            sock_readresp.settimeout(self.udp_timeout)
+
 
             #First send a request to read out this sepecific register at the read request port for the board
             READ_MESSAGE = struct.pack('HHHHHHHHH',socket.htons(self.KEY1), socket.htons(self.KEY2),socket.htons(regVal),0,0,socket.htons(self.FOOTER),0,0,0)
@@ -167,44 +171,29 @@ class LuSEE_ETHERNET:
             #print (sock_read.getsockname())
             sock_read.close()
 
-            #try to receive response packet from board, store in hex
-            data = []
-            try:
-                data = sock_readresp.recv(self.BUFFER_SIZE)
-            except socket.timeout:
-                if (i > 9):
-                    print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
-                    print ("Waited for CDI response on")
-                    print (sock_readresp.getsockname())
-                    sock_readresp.close()
-                    return None
-                else:
-                    print (f"Python Ethernet --> Didn't get a readback response for {hex(reg)}, trying again...")
-
-            #print ("Waited for FEMB response on")
-            #print (sock_readresp.getsockname())
+    def reg_listener(self):
+        print("Listener started")
+        sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
+        sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP))
+        while not self.stop_event.is_set():
+            data, addr = sock_readresp.recvfrom(self.BUFFER_SIZE)
+            print(f"Received data from {addr} on port ")
+            self.data_queue.put((data, addr))  # Put the data and address in the queue
+            threading.Thread(target=self.process_data_from_queue).start()  # Start a new processing thread
+        else:
+            print("Closing socket")
             sock_readresp.close()
-            if (data != []):
-                break
 
-        #Goes from binary data to hexidecimal (because we know this is host order bits)
-        dataHex = []
-        try:
-            dataHex = binascii.hexlify(data)
-            #If reading, say register 0x290, you may get back
-            #029012345678
-            #The first 4 bits are the register you requested, the next 8 bits are the value
-            #Looks for those first 4 bits to make sure you read the register you're looking for
-            if int(dataHex[0:4],16) != regVal :
-                print ("Python Ethernet --> Error read_cdi_reg: Invalid response packet")
-                return None
-
-            #Return the data part of the response in integer form (it's just easier)
-            dataHexVal = int(dataHex[4:12],16)
-            #print ("FEMB_UDP--> Read: reg=%x,value=%x"%(reg,dataHexVal))
-            return dataHexVal
-        except TypeError:
-            print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
+    # Function to process incoming data from the queue
+    def process_data_from_queue(self):
+        while True:
+            data, addr = self.data_queue.get()  # Block until data is available
+            if data is None:  # A way to signal the thread to exit if needed
+                print("data was empty")
+            print(f"Processing data from {addr}: {data}")
+            # Add your data processing logic here
+            self.data_queue.task_done()  # Signal that the task is done
 
     def start(self):
         self.write_reg(self.start_tlm_data, 1)
@@ -360,152 +349,16 @@ class LuSEE_ETHERNET:
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict
 
-    #Writes a bootloader command without waiting for a result
-    def send_bootloader_message(self, message):
-        self.write_cdi_reg(self.write_register, message)
-        self.toggle_cdi_latch()
-
-    #Sets up a socket and then writes a bootloader command to listen to a result
-    #If we open the socket after writing the command, we'll miss the response
-    def send_bootloader_message_response(self, message):
-        #Set up listening socket - IPv4, UDP
-        sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
-        sock_readresp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock_readresp.bind((self.PC_IP, self.PORT_HK))
-        sock_readresp.settimeout(self.udp_timeout)
-
-        #The command to reset the microcontroller and check for the packet that it sends out
-        #is not actually a bootloader command, so it has to be done like this
-        if (message == self.RESET_UC):
-            self.write_reg(self.UC_REG, 1)
-            self.write_reg(self.UC_REG, 0)
-        else:
-            self.send_bootloader_message(message)
-
-        #Bootloader command responses are always one packet, unless we requested a readback
-        #of a hex data region
-        if (message == self.SEND_PROGRAM_TO_DCB):
-            keep_listening = True
-            data = []
-        else:
-            keep_listening = False
-
-        while(True):
-            try:
-                if (keep_listening):
-                    data.append(sock_readresp.recv(self.BUFFER_SIZE))
-                else:
-                    data = sock_readresp.recv(self.BUFFER_SIZE)
-                    break
-            except socket.timeout:
-                if (not keep_listening):
-                    print ("Python Ethernet --> Error read_cdi_reg: No read packet received from board, quitting")
-                    print ("Waited for CDI response on")
-                    print (sock_readresp.getsockname())
-                    return None
-                else:
-                    print("Packets stopped coming")
-                    break
-                sock_readresp.close()
-        sock_readresp.close()
-
-        if (keep_listening):
-            return self.unpack_hex_readback(data)
-        else:
-            try:
-                unpacked = self.check_data_bootloader(data)
-                return unpacked
-            except TypeError as e:
-                print(e)
-                print (f"Python Ethernet --> Error trying to parse CDI Register readback. Data was {data}")
-
-    #Not implemented/finished yet because this function is still under construction in the bootloader
-    def unpack_hex_readback(self, data):
-        data_packet = bytearray()
-        header_dict = {}
-        num = 0
-        for i in data:
-            num += 1
-            unpack_buffer = int((len(i))/2)
-            #Unpacking into shorts in increments of 2 bytes
-            formatted_data = struct.unpack_from(f">{unpack_buffer}H",i)
-            header_dict[num] = self.organize_header(formatted_data)
-            #The header is 13 bytes (26 hex byte characters) and the payload starts after as 32 bit ints
-            data_packet.extend(i[26:])
-
-        data_size = int(len(data_packet)/4)
-        formatted_data2 = struct.unpack_from(f">{data_size}I",data_packet)
-        #But the payload is reversed 2 bytes by 2 bytes
-        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
-        fm3 = [hex(i) for i in formatted_data3]
-        #print(fm3)
-        #With the formatted payload, get all relevant info
-        bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
-
-    #The bootloader response has the standard CDI header, so that's formatted
-    #And the payload is sent for further processing
-    def check_data_bootloader(self, data):
-        data_packet = bytearray()
-        header_dict = {}
-
-        unpack_buffer = int((len(data))/2)
-        #Unpacking into shorts in increments of 2 bytes
-        formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
-        header_dict = self.organize_header(formatted_data)
-
-        #The header is 13 bytes (26 hex byte characters) and the payload starts after as 32 bit ints
-        data_packet.extend(data[26:])
-        data_size = int(len(data_packet)/4)
-        formatted_data2 = struct.unpack_from(f">{data_size}I",data_packet)
-        #But for every 4 byte value in the payload, the first and last 2 bytes are reversed
-        formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
-
-        #With the formatted payload, get all relevant header info
-        if (formatted_data3):
-            bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
-        else:
-            bootloader_resp = None
-
-        return bootloader_resp, header_dict
-
-    #This looks at the common elements of each bootloader response header
-    #Depending on the type of packet response, it knows how to process it further
-    def unpack_bootloader_packet(self, packet):
-        bootloader_dict = {}
-        bootloader_dict['BL_Message'] = hex(packet[0])
-        bootloader_dict['BL_count'] = hex(packet[1])
-        bootloader_dict['BL_timestamp'] = hex((packet[3] << 32) + packet[2])
-        bootloader_dict['BL_end'] = hex(packet[7])
-
-        if (packet[0] == 1):
-            resp = self.unpack_program_jump(packet[8:])
-            bootloader_dict.update(resp)
-        elif (packet[0] == 2):
-            resp = self.unpack_program_info(packet[8:])
-            bootloader_dict.update(resp)
-
-        return bootloader_dict
-
-    #This is the format for the response packet when the client requested program info
-    def unpack_program_info(self, packet):
-        program_info_dict = {}
-        for i in range(0,6):
-            program_info_dict[f"Program{i+1}_metadata_size"] = hex(packet[i*3])
-            program_info_dict[f"Program{i+1}_metadata_checksum"] = hex(packet[(i*3)+1])
-            program_info_dict[f"Program{i+1}_calculated_checksum"] = hex(packet[(i*3)+2])
-        program_info_dict["Loaded_program_size"] = hex(packet[18])
-        program_info_dict["Loaded_program_checksum"] = hex(packet[19])
-        return program_info_dict
-
-    #This is the format for the response packet when the client requested to jump into the loaded program
-    def unpack_program_jump(self, packet):
-        program_info_dict = {}
-        program_info_dict["region_jumped_to"] = hex(packet[0])
-        program_info_dict["default_vals_loaded"] = packet[1]
-        return program_info_dict
 
 if __name__ == "__main__":
-    arg = sys.argv[1]
+    #arg = sys.argv[1]
     e = LuSEE_ETHERNET()
-    e.write_reg(3, 1)
+    listener_thread = threading.Thread(target=e.reg_listener)
+    listener_thread.daemon = True  # Daemonize thread so it exits when the main program exits
+    listener_thread.start()
+    e.write_reg(0x121, 0x69)
+    print("Wrote")
+    time.sleep(1)
+    #e.read_reg(121)
+    #e.write_reg(122, 68)
+    #e.read_reg(122)
