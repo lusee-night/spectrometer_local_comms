@@ -110,8 +110,7 @@ class LuSEE_ETHERNET:
             self.toggle_cdi_latch()
 
             time.sleep(self.wait_time * 10) #Some registers need a longer wait before reading back for some reason
-            print("tim eot read")
-            self.read_reg(reg)
+            #self.read_reg(reg)
             break
             #if (readback == data):
             #    break
@@ -170,18 +169,27 @@ class LuSEE_ETHERNET:
             #print ("Sent read request from")
             #print (sock_read.getsockname())
             sock_read.close()
+            break
 
     def reg_listener(self):
         print("Listener started")
         sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
         sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP))
-        while not self.stop_event.is_set():
-            data, addr = sock_readresp.recvfrom(self.BUFFER_SIZE)
-            print(f"Received data from {addr} on port ")
-            self.data_queue.put((data, addr))  # Put the data and address in the queue
-            threading.Thread(target=self.process_data_from_queue).start()  # Start a new processing thread
-        else:
+        try:
+            while not self.stop_event.is_set():
+                sock_readresp.settimeout(1.0)  # Set a timeout to check the stop_event
+                try:
+                    data, addr = sock_readresp.recvfrom(self.BUFFER_SIZE)
+                    print(f"Received data from {addr}")
+                    self.data_queue.put((data, addr))
+                    threading.Thread(target=self.process_data_from_queue).start()
+                except socket.timeout:
+                    print("Checking if stop event called")
+                    continue  # Continue to check if stop_event is set
+        except KeyboardInterrupt:
+            print("Keyboard interrupt received, stopping listener...")
+        finally:
             print("Closing socket")
             sock_readresp.close()
 
@@ -192,6 +200,15 @@ class LuSEE_ETHERNET:
             if data is None:  # A way to signal the thread to exit if needed
                 print("data was empty")
             print(f"Processing data from {addr}: {data}")
+            dataHex = binascii.hexlify(data)
+            #If reading, say register 0x290, you may get back
+            #029012345678
+            #The first 4 bits are the register you requested, the next 8 bits are the value
+            #Looks for those first 4 bits to make sure you read the register you're looking for
+            #Return the data part of the response in integer form (it's just easier)
+            dataHexVal = int(dataHex[4:12],16)
+            #print ("FEMB_UDP--> Read: reg=%x,value=%x"%(reg,dataHexVal))
+            print (dataHex[4:12])
             # Add your data processing logic here
             self.data_queue.task_done()  # Signal that the task is done
 
@@ -349,6 +366,10 @@ class LuSEE_ETHERNET:
         formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
         return formatted_data3, header_dict
 
+    def stop_all_threads(self):
+        self.stop_event.set()
+        for thread in self.threads:
+            thread.join()  # Ensure all threads are finished
 
 if __name__ == "__main__":
     #arg = sys.argv[1]
@@ -359,6 +380,20 @@ if __name__ == "__main__":
     e.write_reg(0x121, 0x69)
     print("Wrote")
     time.sleep(1)
-    #e.read_reg(121)
+    e.read_reg(0x121)
     #e.write_reg(122, 68)
     #e.read_reg(122)
+
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("It was a keyboard interrupt")
+    finally:
+        print("Main program interrupted, stopping listener...")
+        #e.stop_event.set()  # Signal the listener to stop
+        #e.stop_all_threads()
+        e.stop_event.set()
+        listener_thread.join()  # Wait for the listener thread to finish
+        #e.data_queue.put((None, None))  # Optionally, signal the processing thread to exit
+        print("Program terminated cleanly.")
