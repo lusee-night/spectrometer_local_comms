@@ -6,10 +6,15 @@ import socket
 import binascii
 import threading
 import queue
+import select
+import logging
+import logging.config
 from datetime import datetime
 
 class LuSEE_ETHERNET:
     def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.debug("Class created")
         self.version = 1.15
 
         self.UDP_IP = "192.168.121.1"
@@ -58,6 +63,20 @@ class LuSEE_ETHERNET:
 
         self.data_queue = queue.Queue()
         self.stop_event = threading.Event()
+
+        self.sock_readresp = None
+        self.dummy_socket, self.dummy_socket_wakeup = socket.socketpair()
+        self.listener_thread = threading.Thread(target=self.reg_listener)
+        self.listener_thread.daemon = True  # Daemonize thread so it exits when the main program exits
+        self.listener_thread.start()
+        self.logger.debug("Class created listener")
+
+
+    def stop(self):
+        self.logger.debug("Stopping it all")
+        self.stop_event.set()
+        self.dummy_socket_wakeup.send(b'\x00')
+        self.logger.debug("Stopped")
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
@@ -172,26 +191,39 @@ class LuSEE_ETHERNET:
             break
 
     def reg_listener(self):
-        print("Listener started")
-        sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.logger.debug("Listener started")
+        self.sock_readresp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #Allows us to quickly access the same socket and ignore the usual OS wait time betweeen accesses
-        sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP))
+        self.sock_readresp.bind((self.PC_IP, self.FEMB_PORT_RREGRESP))
         try:
             while not self.stop_event.is_set():
-                sock_readresp.settimeout(1.0)  # Set a timeout to check the stop_event
-                try:
-                    data, addr = sock_readresp.recvfrom(self.BUFFER_SIZE)
-                    print(f"Received data from {addr}")
-                    self.data_queue.put((data, addr))
-                    threading.Thread(target=self.process_data_from_queue).start()
-                except socket.timeout:
-                    print("Checking if stop event called")
-                    continue  # Continue to check if stop_event is set
-        except KeyboardInterrupt:
-            print("Keyboard interrupt received, stopping listener...")
+                self.logger.debug(f"Select")
+                ready, _, _ = select.select([self.sock_readresp, self.dummy_socket], [], [], None)
+                if self.dummy_socket in ready:
+                    self.logger.debug("Received wakeup signal, exiting")
+                    break
+                if self.sock_readresp in ready:
+                    try:
+                        self.logger.debug(f"Waiting to receive data")
+                        data, addr = self.sock_readresp.recvfrom(self.BUFFER_SIZE)
+                        self.logger.debug(f"Received data from {addr}")
+                        self.data_queue.put((data, addr))
+                        threading.Thread(target=self.process_data_from_queue).start()
+                    except OSError as e:
+                        self.logger.debug(f"Error was {e}")
+                        # The socket was closed from another thread
+                        self.logger.debug("Socket closed, exiting listener loop")
+                        break
+        except Exception as e:
+            self.logger.debug(f"Exception in listener thread: {e}")
         finally:
-            print("Closing socket")
-            sock_readresp.close()
+            if self.sock_readresp:
+                self.sock_readresp.close()
+            if self.dummy_socket:
+                self.dummy_socket.close()
+            if self.dummy_socket_wakeup:
+                self.dummy_socket_wakeup.close()
+            self.logger.debug("Listener thread exited")
 
     # Function to process incoming data from the queue
     def process_data_from_queue(self):
@@ -372,11 +404,17 @@ class LuSEE_ETHERNET:
             thread.join()  # Ensure all threads are finished
 
 if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    relative_path = '../config/config_logger.ini'
+    config_path = os.path.join(script_dir, relative_path)
+    logging.config.fileConfig(config_path)
+
     #arg = sys.argv[1]
     e = LuSEE_ETHERNET()
-    listener_thread = threading.Thread(target=e.reg_listener)
-    listener_thread.daemon = True  # Daemonize thread so it exits when the main program exits
-    listener_thread.start()
+    # sys.exit()
+    # listener_thread = threading.Thread(target=e.reg_listener)
+    # listener_thread.daemon = True  # Daemonize thread so it exits when the main program exits
+    # listener_thread.start()
     e.write_reg(0x121, 0x69)
     print("Wrote")
     time.sleep(1)
@@ -393,7 +431,9 @@ if __name__ == "__main__":
         print("Main program interrupted, stopping listener...")
         #e.stop_event.set()  # Signal the listener to stop
         #e.stop_all_threads()
-        e.stop_event.set()
-        listener_thread.join()  # Wait for the listener thread to finish
+        e.stop()
+        e.logger.debug("Waiting to join")
+        e.listener_thread.join()
+        e.logger.debug("Class sees that listener is done")
         #e.data_queue.put((None, None))  # Optionally, signal the processing thread to exit
         print("Program terminated cleanly.")
