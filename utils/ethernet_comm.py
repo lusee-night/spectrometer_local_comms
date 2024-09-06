@@ -16,7 +16,7 @@ class LuSEE_ETHERNET:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.debug("Class created")
-        self.version = 1.15
+        self.version = 1.16
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
@@ -201,7 +201,7 @@ class LuSEE_ETHERNET:
             self.write_cdi_reg(self.latch_register, 0, self.PORT_RREG)
             while not self.stop_event.is_set():
                 resp = self.processing.reg_output_queue.get()
-                self.processing.reg_output_queue.reg_input_queue.task_done()
+                self.processing.reg_output_queue.task_done()
                 if resp is self.processing.stop_signal:
                     self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
                     break
@@ -226,6 +226,18 @@ class LuSEE_ETHERNET:
         read_dict = {"command": "read",
                       "reg": reg}
         self.send_queue.put(read_dict)
+
+        while not self.stop_event.is_set():
+            resp = self.processing.reg_output_queue.get()
+            self.processing.reg_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
+                break
+            if (resp["reg"] == reg):
+                return resp["data"]
+            else:
+                self.logger.warning(f"Read requested for register {reg}, but received {resp}")
+                break
 
     def write_cdi_reg(self, reg, data, port):
         self.logger.debug(f"Writing {hex(val)} to Register {hex(reg)}")
