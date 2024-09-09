@@ -174,7 +174,6 @@ class LuSEE_ETHERNET:
                 self.write_cdi_reg(self.write_register, address_value, self.PORT_WREG)
                 time.sleep(self.wait_time)
                 self.toggle_cdi_latch()
-
             elif (task["command"] == "read"):
                 reg = int(task["reg"])
                 self.logger.info(f"Reading Register {hex(reg)}")
@@ -186,11 +185,15 @@ class LuSEE_ETHERNET:
                 self.toggle_cdi_latch()
                 #Tells the DCB emulator the command to read
                 self.write_cdi_reg(self.readback_register, 0, self.PORT_RREG)
-
+            elif (task["command"] == "write_bootloader"):
+                self.logger.info(f"Writing {hex(task['message'])} to the bootloader")
+                self.write_cdi_reg(self.write_register, task["message"])
+                time.sleep(self.wait_time)
+                self.toggle_cdi_latch()
             else:
                 self.logger.warning(f"Unknown command in send queue: {task}")
 
-        sock_write.close()
+        self.sock_write.close()
         self.logger.debug(f"{name} exited")
 
     def toggle_cdi_latch(self):
@@ -200,7 +203,7 @@ class LuSEE_ETHERNET:
         while True:
             self.write_cdi_reg(self.latch_register, 0, self.PORT_RREG)
             while not self.stop_event.is_set():
-                resp = self.processing.reg_output_queue.get()
+                resp = self.processing.reg_output_queue.get(True, self.read_timeout)
                 self.processing.reg_output_queue.task_done()
                 if resp is self.processing.stop_signal:
                     self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
@@ -228,7 +231,7 @@ class LuSEE_ETHERNET:
         self.send_queue.put(read_dict)
 
         while not self.stop_event.is_set():
-            resp = self.processing.reg_output_queue.get()
+            resp = self.processing.reg_output_queue.get(True, self.read_timeout)
             self.processing.reg_output_queue.task_done()
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")

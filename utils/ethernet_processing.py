@@ -3,6 +3,11 @@ import threading
 import queue
 import logging
 import logging.config
+import time
+
+from process_data import LuSEE_PROCESS_DATA
+from process_hk import LuSEE_PROCESS_HK
+from process_reg import LuSEE_PROCESS_REG
 
 class LuSEE_PROCESSING:
     _instance = None
@@ -25,10 +30,14 @@ class LuSEE_PROCESSING:
             self.hk_input_queue = queue.Queue()
 
             self.reg_output_queue = queue.Queue()
-            self.data_output_queue = queue.Queue()
+            self.count_output_queue = queue.Queue()
+            self.adc_output_queue = queue.Queue()
+            self.pfb_output_queue = queue.Queue()
             self.hk_output_queue = queue.Queue()
 
-            process_thread_settings = [(self.process_reg, "Register Response Processing Thread")]
+            process_thread_settings = [(LuSEE_PROCESS_REG(self).process_reg, "Register Response Processing Thread"),
+                                       (LuSEE_PROCESS_DATA(self).process_data, "Data Processing Thread"),
+                                       (LuSEE_PROCESS_HK(self).process_hk, "Housekeeping Processing Thread")]
             self.process_threads = []
             for process_settings in process_thread_settings:
                 thread = threading.Thread(target=process_settings[0],
@@ -44,33 +53,26 @@ class LuSEE_PROCESSING:
         self.reg_input_queue.put(self.stop_signal)
         self.data_input_queue.put(self.stop_signal)
         self.hk_input_queue.put(self.stop_signal)
-
+        self.hk_input_queue.put(self.stop_signal)
         for i in self.process_threads:
             self.logger.debug(f"Waiting for {i.name} to join")
             i.join()
             self.logger.debug(f"Class sees that {i.name} is done")
 
-    def process_reg(self):
-        name = threading.current_thread().name
-        self.logger.debug(f"{name} started")
-        while not self.stop_event.is_set():
-            data = self.reg_input_queue.get()
-            self.reg_input_queue.task_done()
-            if data is self.stop_signal:
-                self.logger.debug(f"{name} has been told to stop. Exiting...")
-                self.reg_output_queue.put(self.stop_signal)
-                break
-            dataHex = binascii.hexlify(data)
-            #If reading, say register 0x290, you may get back
-            #029012345678
-            #The first 4 bits are the register you requested, the next 8 bits are the value
-            #Looks for those first 4 bits to make sure you read the register you're looking for
-            #Return the data part of the response in integer form (it's just easier)
-            response_reg = int(dataHex[0:3],16)
-            data_val = int(dataHex[4:12],16)
-
-            response_dict = {"reg": response_reg,
-                             "data": data_val}
-            self.logger.debug(f"Received {response_dict}")
-            self.reg_output_queue.put(response_dict)
-        self.logger.debug(f"{name} exited")
+    #Unpack the header files into a dictionary, this is common for all CDI responses
+    def organize_header(self, formatted_data):
+        header_dict = {}
+        header_dict["udp_packet_num"] = hex((formatted_data[0] << 16) + formatted_data[1])
+        header_dict["header_user_info"] = hex((formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5])
+        header_dict["system_status"] = hex((formatted_data[6] << 16) + formatted_data[7])
+        header_dict["message_id"] = hex(formatted_data[8] >> 10)
+        header_dict["message_length"] = hex(formatted_data[8] & 0x3FF)
+        header_dict["message_spare"] = hex(formatted_data[9])
+        header_dict["ccsds_version"] = hex(formatted_data[10] >> 13)
+        header_dict["ccsds_packet_type"] = hex((formatted_data[10] >> 12) & 0x1)
+        header_dict["ccsds_secheaderflag"] = hex((formatted_data[10] >> 11) & 0x1)
+        header_dict["ccsds_appid"] = hex(formatted_data[10] & 0x7FF)
+        header_dict["ccsds_groupflags"] = hex(formatted_data[11] >> 14)
+        header_dict["ccsds_sequence_cnt"] = hex(formatted_data[11] & 0x3FFF)
+        header_dict["ccsds_packetlen"] = hex(formatted_data[12])
+        return header_dict

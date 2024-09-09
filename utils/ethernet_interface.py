@@ -10,6 +10,8 @@ class LuSEE_INTERFACE:
         self.comm = LuSEE_ETHERNET()
         self.processing = LuSEE_PROCESSING()
 
+        self.read_timeout = 2
+
     def write_reg(self, reg, val):
         write_dict = {"command": "write",
                       "reg": int(reg),
@@ -22,7 +24,7 @@ class LuSEE_INTERFACE:
         self.comm.send_queue.put(read_dict)
 
         while not self.comm.stop_event.is_set():
-            resp = self.processing.reg_output_queue.get()
+            resp = self.processing.reg_output_queue.get(True, self.read_timeout)
             self.processing.reg_output_queue.task_done()
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"read_reg has been told to stop. Exiting...")
