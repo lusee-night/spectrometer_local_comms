@@ -131,13 +131,15 @@ class LuSEE_COMMS:
         self.FFT_PACKETS = 3
         self.tries = 5
         self.bytes_per_packet = 0x7F8
-        self.counter_num = None
         self.cycle_time = 40e-6
         self.avg = 0
         self.notch_avg = 0
         self.Nac1_val = 0
         self.Nac2_val = 0
         self.wait_time = 0.025
+
+    def stop(self):
+        self.connection.stop()
 
     #Only need to do one in the beginning
     #Takes a few seconds
@@ -248,7 +250,7 @@ class LuSEE_COMMS:
             print(f"Python LuSEE Comm --> You need to use a readout method of 'fpga' or 'sw', you used {mode}")
 
     def set_counter_num(self, num):
-        self.counter_num = int(num)
+        self.connection.processing.data.count_num = int(num)
         self.connection.write_reg(self.num_samples, int(num))
 
     def reset_all_fifos(self):
@@ -450,26 +452,22 @@ class LuSEE_COMMS:
         self.connection.write_reg(register, add_value)
         return add_value
 
-    def get_data(self, data_type, num, header=False):
-        return self.connection.get_data_packets(data_type=data_type, num=num, header=header)
+    def get_adc_data(self):
+        self.connection.request_fw_packet()
+        return self.connection.get_adc_data()
 
-    def get_adc_data(self, header=False):
-        return self.get_data(data_type = "adc", num=self.ADC_PACKETS, header = header)
+    def get_counter_data(self):
+        self.connection.request_fw_packet()
+        return self.connection.get_count_data()
 
-    def get_counter_data(self, header=False):
-        if (self.counter_num == None):
-            print("LuSEE COMM --> You need to set the counter number before reading out the counter FIFO!")
-            return
-        packets = (self.counter_num // self.bytes_per_packet) + 1
-        return self.get_data(data_type = "adc", num=packets, header = header)
-
-    def get_pfb_data(self, header=False, wait=True):
-        if wait:
-            wait_time = self.cycle_time * (2**self.avg)
-            if (wait_time > 1.0):
-                print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
-        time.sleep(self.cycle_time * (2**self.avg))
-        return self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
+    def get_pfb_data(self):
+        self.connection.request_fw_packet()
+        wait_time = self.cycle_time * (2**self.avg) * 1.2
+        if (wait_time > 1.0):
+            self.logger.info(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+        else:
+            wait_time = 1
+        return self.connection.get_pfb_data(timeout = wait_time)
 
     def get_pfb_data_sw(self, header_return = False, avg = None, test = False):
         if (avg != None):

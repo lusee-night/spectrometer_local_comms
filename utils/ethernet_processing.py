@@ -5,9 +5,9 @@ import logging
 import logging.config
 import time
 
-from process_data import LuSEE_PROCESS_DATA
-from process_hk import LuSEE_PROCESS_HK
-from process_reg import LuSEE_PROCESS_REG
+from utils import LuSEE_PROCESS_DATA
+from utils import LuSEE_PROCESS_HK
+from utils import LuSEE_PROCESS_REG
 
 class LuSEE_PROCESSING:
     _instance = None
@@ -29,15 +29,20 @@ class LuSEE_PROCESSING:
             self.data_input_queue = queue.Queue()
             self.hk_input_queue = queue.Queue()
 
+            self.dcb_emulator_queue = queue.Queue()
             self.reg_output_queue = queue.Queue()
             self.count_output_queue = queue.Queue()
             self.adc_output_queue = queue.Queue()
             self.pfb_output_queue = queue.Queue()
             self.hk_output_queue = queue.Queue()
 
-            process_thread_settings = [(LuSEE_PROCESS_REG(self).process_reg, "Register Response Processing Thread"),
-                                       (LuSEE_PROCESS_DATA(self).process_data, "Data Processing Thread"),
-                                       (LuSEE_PROCESS_HK(self).process_hk, "Housekeeping Processing Thread")]
+            self.reg = LuSEE_PROCESS_REG(self)
+            self.data = LuSEE_PROCESS_DATA(self)
+            self.hk = LuSEE_PROCESS_HK(self)
+
+            process_thread_settings = [(self.reg.process_reg, "Register Response Processing Thread"),
+                                       (self.data.process_data, "Data Processing Thread"),
+                                       (self.hk.process_hk, "Housekeeping Processing Thread")]
             self.process_threads = []
             for process_settings in process_thread_settings:
                 thread = threading.Thread(target=process_settings[0],

@@ -3,6 +3,8 @@ import sys
 import json
 import math
 import time
+import logging
+import logging.config
 from datetime import datetime
 
 from utils import LuSEE_COMMS
@@ -10,10 +12,10 @@ from utils import LuSEE_PLOTTING
 
 class LuSEE_MEASURE:
     def __init__(self):
-        self.version = 1.12
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.debug("Class created")
         self.comm = LuSEE_COMMS()
         self.output_dir = "output"
-        self.prefix = "LuSEE Measure --> "
         self.tick_size = 22
         self.title_size = 32
         self.subtitle_size = 28
@@ -27,12 +29,12 @@ class LuSEE_MEASURE:
         self.comm.write_adc(0, 0x2B, 0x04) #Enable ramp for channel B on ADC0
         self.comm.write_adc(1, 0x2B, 0x04) #Enable ramp for channel B on ADC1
 
-    def get_adc_data(self, adc, header):
+    def get_adc_data(self, adc):
         self.comm.readout_mode("fpga")
         self.comm.reset_all_fifos()
         self.comm.load_adc_fifos()
         self.comm.set_function(f"ADC{adc}")
-        return self.comm.get_adc_data(header = header)
+        return self.comm.get_adc_data()
 
     def get_adcs_sync(self):
         self.comm.readout_mode("fpga")
@@ -58,7 +60,8 @@ class LuSEE_MEASURE:
 
     def to_radian(self, val):
         if (val > 1 or val < -1):
-            sys.exit(f"lusee_measure --> Must supply radian values between -1 and 1. You supplied {val}")
+            self.logger.critical(f"lusee_measure --> Must supply radian values between -1 and 1. You supplied {val}")
+            sys.exit()
         sign = True if val >= 0 else False
         if (sign):
             working_val = 0
@@ -134,9 +137,7 @@ class LuSEE_MEASURE:
         self.setup()
         for i in range(1, 5):
             if (self.json_data[f"adc{i}_save_data"]):
-                data, header = self.get_adc_data(i, True)
-                adc_dict = {"header": header,
-                            "data": data}
+                adc_dict = self.get_adc_data(i)
                 with open(os.path.join(self.results_path, f"adc{i}_output.json"), 'w', encoding='utf-8') as f:
                     json.dump(adc_dict, f, ensure_ascii=False, indent=4, default=str)
 
@@ -154,9 +155,7 @@ class LuSEE_MEASURE:
             if (self.json_data[f"pfb{i}_fpga_save_data"]):
                 self.comm.set_function(f"FFT{i}")
                 # while(True):
-                data, header = self.comm.get_pfb_data(header = True)
-                pfb_dict = {"header": header,
-                            "data": data}
+                pfb_dict = self.comm.get_pfb_data()
                 with open(os.path.join(self.results_path, f"pfb_fpga{i}_output.json"), 'w', encoding='utf-8') as f:
                     json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
 
@@ -191,7 +190,7 @@ class LuSEE_MEASURE:
         if (self.json_data[f"pretest"]):
             for i in range(1, 5):
                 if (self.json_data[f"adc{i}_save_data"]):
-                    data, header = self.get_adc_data(i, True)
+                    data, header = self.get_adc_data(i)
                     adc_dict = {"header": header,
                                 "data": data}
                     with open(os.path.join(self.results_path, f"adc{i}_output.json"), 'w', encoding='utf-8') as f:
@@ -224,7 +223,7 @@ class LuSEE_MEASURE:
             pfb_dict.update({f"header{i}": header,
                         f"data{i}": data})
             self.comm.load_fft_fifos()
-            print("got it")
+            self.logger.info("got it")
         with open(os.path.join(self.results_path, f"notch_filter_output.json"), 'w', encoding='utf-8') as f:
             json.dump(pfb_dict, f, ensure_ascii=False, indent=4, default=str)
 
@@ -242,7 +241,8 @@ class LuSEE_MEASURE:
             self.comm.set_pcb(1)
         else:
             pcb = self.json_data["pcb"]
-            sys.exit(f"{self.prefix}Error, pcb model designated as {pcb}")
+            self.logger.critical(f"{self.prefix}Error, pcb model designated as {pcb}")
+            sys.exit()
 
         self.comm.set_chan_gain(0, self.json_data["mux1_in1"], self.json_data["mux1_in2"], self.json_data["mux1_gain"])
         self.comm.set_chan_gain(1, self.json_data["mux2_in1"], self.json_data["mux2_in2"], self.json_data["mux2_gain"])
@@ -275,7 +275,7 @@ class LuSEE_MEASURE:
 
         wait_time = self.comm.cycle_time * (2**avgs)
         if (wait_time > 1.0):
-            print(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
+            self.logger.info(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
 
     def setup_calibrator(self):
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
@@ -387,7 +387,7 @@ class LuSEE_MEASURE:
         self.comm.reset_calibrator()
 
     def start_test(self, config_file):
-        print(f"{self.prefix}Initializing Test")
+        self.logger.info(f"Initializing Test")
         with open(config_file, "r") as jsonfile:
             self.json_data = json.load(jsonfile)
 
@@ -424,7 +424,8 @@ class LuSEE_MEASURE:
         elif (test == "debug"):
             self.debug()
         else:
-            sys.exit(f"{self.prefix}Incorrect test supplied, {test} is not valid.")
+            self.logger.critical(f"{self.prefix}Incorrect test supplied, {test} is not valid.")
+            sys.exit()
 
         end_time = datetime.now()
         test_time = end_time - self.start_time
@@ -434,28 +435,34 @@ class LuSEE_MEASURE:
         with open(self.json_output_file, 'w', encoding='utf-8') as f:
             json.dump(self.datastore, f, ensure_ascii=False, indent=4, default=str)
 
-        print(f"{self.prefix}Test complete")
+        self.logger.info(f"Test complete")
 
 if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    relative_path = 'config/config_logger.ini'
+    config_path = os.path.join(script_dir, relative_path)
+    logging.config.fileConfig(config_path)
+
     if (len(sys.argv) > 1):
         arg = sys.argv[1]
     else:
         sys.exit("You need to supply an argument")
     measure = LuSEE_MEASURE()
-    measure.comm.connection.write_cdi_reg(5, 69)
+    measure.comm.connection.write_cdi_reg(5, 69, 32000)
     resp = measure.comm.connection.read_cdi_reg(5)
-    if (resp == 69):
-        print("[TEST] Communication to DCB Emulator is ok")
+    if (resp["data"] == 69):
+        measure.logger.info("Communication to DCB Emulator is ok")
     else:
-        sys.exit("[TEST] Communication to DCB Emulator is not ok")
+        measure.logger.critical(f"Communication to DCB Emulator is not ok. Response was {resp}")
+        sys.exit()
 
     measure.comm.connection.write_reg(0x120, 69)
     resp = measure.comm.connection.read_reg(0x120)
     if (resp == 69):
-        print("[TEST] Communication to Spectrometer Board is ok")
+        measure.logger.info("Communication to Spectrometer Board is ok")
     else:
-        print(resp)
-        sys.exit("[TEST] Communication to Spectrometer Board is not ok")
+        measure.logger.critical(f"Communication to Spectrometer Board is not ok. Response was {resp}")
+        sys.exit()
 
     if (arg == "reset"):
         measure.comm.reset()
@@ -465,6 +472,8 @@ if __name__ == "__main__":
         measure.set_all_adc_ramp()
 
     if len(sys.argv) < 2:
-        sys.exit(f"Error: You need to supply a config file for this test as the argument! You had {len(sys.argv)-1} arguments!")
+        measure.logger.critical(f"Error: You need to supply a config file for this test as the argument! You had {len(sys.argv)-1} arguments!")
+        sys.exit()
 
     measure.start_test(arg)
+    measure.comm.stop()

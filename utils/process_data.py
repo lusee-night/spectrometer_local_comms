@@ -1,5 +1,6 @@
 import threading
 import queue
+import struct
 import logging
 import logging.config
 
@@ -18,18 +19,18 @@ class LuSEE_PROCESS_DATA:
         self.count_num = None
         self.bytes_per_packet = 0x7F8
         self.count_pkt_num = None
-        self.count_apid = 0x209
+        self.count_apid = "0x209"
         self.adc_pkt_num = 9
-        self.adc_apids = [0x220, 0x221, 0x222, 0x223]
+        self.adc_apids = ["0x220", "0x221", "0x222", "0x223", "0x2f0", "0x2f1", "0x2f2", "0x2f3"]
         self.fft_pkt_num = 3
-        self.fft_apids = [0x210, 0x211, 0x212, 0x213, 0x214, 0x215, 0x216, 0x217, 0x218, 0x219, 0x21A, 0x21B, 0x21C, 0x21D, 0x21E, 0x21F]
+        self.fft_apids = ["0x210", "0x211", "0x212", "0x213", "0x214", "0x215", "0x216", "0x217", "0x218", "0x219", "0x21a", "0x21b", "0x21c", "0x21d", "0x21e", "0x21f", "0x2e0", "0x2e1", "0x2e2", "0x2e3"]
 
     def process_data(self):
         name = threading.current_thread().name
         self.logger.debug(f"{name} started")
         #This will track the type of data packet we are receiving and what number packet we're on
         current_type = [None, 0]
-        running_process = {}
+        running_process = {"header" : {}}
         while not self.stop_event.is_set():
             data = self.data_input_queue.get()
             self.data_input_queue.task_done()
@@ -43,21 +44,20 @@ class LuSEE_PROCESS_DATA:
             #Unpacking into shorts in increments of 2 bytes
             formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
             header = self.parent.organize_header(formatted_data)
-
-            if ((header["ccsds_appid"] in fft_apids) and ((current_type[0] == None) or (current_type[0] == "FFT"))):
+            if ((header["ccsds_appid"] in self.fft_apids) and ((current_type[0] == None) or (current_type[0] == "FFT"))):
                 running_process["header"][current_type[1]] = header
                 current_type[1] += 1
                 self.logger.debug(f"This is packet #{current_type[1]} in an FFT sequence")
                 if (current_type[1] < self.fft_pkt_num):
                     #The rest of the raw data is after the 13 * 2 byte header
                     if ("raw_data" in running_process):
-                        running_process["raw_data"].extend(data[26:])
+                        running_process["raw_data"] += (data[26:])
                     else:
                         running_process["raw_data"] = data[26:]
                     current_type[0] = "FFT"
                 elif (current_type[1] == self.fft_pkt_num):
                     self.logger.debug("Final packet for FFT")
-                    running_process["raw_data"].extend(data[26:])
+                    running_process["raw_data"] += (data[26:])
 
                     #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
                     formatted_data2 = struct.unpack_from(">2048I",running_process["raw_data"])
@@ -68,12 +68,12 @@ class LuSEE_PROCESS_DATA:
                                     }
                     self.pfb_output_queue.put(final_header)
                     current_type = [None, 0]
-                    running_process = {}
+                    running_process = {"header" : {}}
                 else:
                     self.logger.warning(f"Was reading FFT and packet number is {current_type[1]}")
                     current_type = [None, 0]
-                    running_process = {}
-            elif ((header["ccsds_appid"] in adc_apids) and ((current_type[0] == None) or (current_type[0] == "ADC"))):
+                    running_process = {"header" : {}}
+            elif ((header["ccsds_appid"] in self.adc_apids) and ((current_type[0] == None) or (current_type[0] == "ADC"))):
                 running_process["header"][current_type[1]] = header
                 current_type[1] += 1
                 self.logger.debug(f"This is packet #{current_type[1]} in an ADC sequence")
@@ -83,19 +83,19 @@ class LuSEE_PROCESS_DATA:
                     if ("data" in running_process):
                         running_process["data"].extend(formatted_data[13:])
                     else:
-                        running_process["data"] = formatted_data[13:]
+                        running_process["data"] = list(formatted_data[13:])
                     current_type[0] = "ADC"
                 elif (current_type[1] == self.adc_pkt_num):
                     self.logger.debug("Final packet for ADC")
                     running_process["data"].extend(formatted_data[13:])
                     self.adc_output_queue.put(running_process)
                     current_type = [None, 0]
-                    running_process = {}
+                    running_process = {"header" : {}}
                 else:
                     self.logger.warning(f"Was reading ADC and packet number is {current_type[1]}")
                     current_type = [None, 0]
-                    running_process = {}
-            elif ((header["ccsds_appid"] == count_apid) and ((current_type[0] == None) or (current_type[0] == "Count"))):
+                    running_process = {"header" : {}}
+            elif ((header["ccsds_appid"] == self.count_apid) and ((current_type[0] == None) or (current_type[0] == "Count"))):
                 running_process["header"][current_type[1]] = header
                 current_type[1] += 1
                 self.logger.debug(f"This is packet #{current_type[1]} in a Counter sequence")
@@ -105,11 +105,11 @@ class LuSEE_PROCESS_DATA:
                         continue
                     else:
                         self.count_pkt_num = (self.count_num // self.bytes_per_packet) + 1
-                        running_process["data"] = formatted_data[13:]
+                        running_process["data"] = list(formatted_data[13:])
                         if (self.count_pkt_num == 1):
                             self.count_output_queue.put(running_process)
                             current_type = [None, 0]
-                            running_process = {}
+                            running_process = {"header" : {}}
                         else:
                             current_type[0] == "Count"
                 elif (not self.count_pkt_num):
@@ -126,11 +126,11 @@ class LuSEE_PROCESS_DATA:
                     running_process["data"].extend(formatted_data[13:])
                     self.count_output_queue.put(running_process)
                     current_type = [None, 0]
-                    running_process = {}
+                    running_process = {"header" : {}}
                 else:
                     self.logger.warning(f"Was reading Count and packet number is {current_type[1]}")
                     current_type = [None, 0]
-                    running_process = {}
+                    running_process = {"header" : {}}
             else:
                 self.logger.error(f"APID is {header['ccsds_appid']}, running type is {current_type}")
 

@@ -1,26 +1,23 @@
 import time
 import os,sys
 import struct
-import csv
 import socket
-import binascii
 import threading
 import queue
 import select
 import logging
 import logging.config
 from datetime import datetime
-from ethernet_processing import LuSEE_PROCESSING
+from utils import LuSEE_PROCESSING
 
 class LuSEE_ETHERNET:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.debug("Class created")
-        self.version = 1.16
 
         self.UDP_IP = "192.168.121.1"
         self.PC_IP = "192.168.121.50"
-        self.udp_timeout = 1
+        self.read_timeout = 1
 
         self.PORT_WREG = 32000
         self.PORT_RREG = 32001
@@ -102,6 +99,7 @@ class LuSEE_ETHERNET:
             i.join()
             self.logger.debug(f"Class sees that {i.name} is done")
         self.processing.stop()
+        self.logger.info("Closed gracefully")
 
     def listener(self, port, q):
         name = threading.current_thread().name
@@ -154,7 +152,7 @@ class LuSEE_ETHERNET:
             if (task["command"] == "write"):
                 reg = int(task["reg"])
                 val = int(task["val"])
-                self.logger.info(f"Writing {hex(val)} to Register {hex(reg)}")
+                self.logger.debug(f"Thread is writing {hex(val)} to Register {hex(reg)}")
 
                 #Splits the register up, since both halves need to go through socket.htons seperately
                 dataValMSB = ((val >> 16) & 0xFFFF)
@@ -176,7 +174,7 @@ class LuSEE_ETHERNET:
                 self.toggle_cdi_latch()
             elif (task["command"] == "read"):
                 reg = int(task["reg"])
-                self.logger.info(f"Reading Register {hex(reg)}")
+                self.logger.debug(f"Thread is reading Register {hex(reg)}")
 
                 address_value = self.address_read + reg
                 #Tells the DCB emulator which register to read
@@ -199,19 +197,15 @@ class LuSEE_ETHERNET:
     def toggle_cdi_latch(self):
         self.write_cdi_reg(self.latch_register, 1, self.PORT_WREG)
         time.sleep(self.wait_time)
+        self.write_cdi_reg(self.latch_register, 0, self.PORT_WREG)
         attempt = 0
         while True:
-            self.write_cdi_reg(self.latch_register, 0, self.PORT_RREG)
-            while not self.stop_event.is_set():
-                resp = self.processing.reg_output_queue.get(True, self.read_timeout)
-                self.processing.reg_output_queue.task_done()
-                if resp is self.processing.stop_signal:
-                    self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
-                    break
+            resp = self.read_cdi_reg(self.latch_register)
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
                 break
             if (resp["data"] >> 31):
+                self.logger.debug(f"toggle_cdi_latch was successful outer loop")
                 break
             else:
                 attempt += 1
@@ -219,31 +213,20 @@ class LuSEE_ETHERNET:
                 self.logger.warning(f"toggle_cdi_latch was unable to see the latch register complete. Returned {resp}")
                 break
 
-    def write_reg(self, reg, data):
-        write_dict = {"command": "write",
-                      "reg": reg,
-                      "val": val}
-        self.send_queue.put(write_dict)
-
-    def read_reg(self, reg):
-        read_dict = {"command": "read",
-                      "reg": reg}
-        self.send_queue.put(read_dict)
-
+    def read_cdi_reg(self, reg):
+        self.logger.debug(f"Reading CD Register {hex(reg)}")
+        self.write_cdi_reg(int(reg), 0, self.PORT_RREG)
         while not self.stop_event.is_set():
-            resp = self.processing.reg_output_queue.get(True, self.read_timeout)
-            self.processing.reg_output_queue.task_done()
+            resp = self.processing.dcb_emulator_queue.get(True, self.read_timeout)
+            self.processing.dcb_emulator_queue.task_done()
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
                 break
-            if (resp["reg"] == reg):
-                return resp["data"]
             else:
-                self.logger.warning(f"Read requested for register {reg}, but received {resp}")
-                break
+                return resp
 
     def write_cdi_reg(self, reg, data, port):
-        self.logger.debug(f"Writing {hex(val)} to Register {hex(reg)}")
+        self.logger.debug(f"Writing {hex(data)} to CDI Register {hex(reg)}")
         #Splits the register up, since both halves need to go through socket.htons seperately
         dataValMSB = ((data >> 16) & 0xFFFF)
         dataValLSB = data & 0xFFFF
@@ -251,7 +234,28 @@ class LuSEE_ETHERNET:
                                     socket.htons(reg),socket.htons(dataValMSB),
                                     socket.htons(dataValLSB),socket.htons(self.FOOTER), 0x0, 0x0, 0x0)
 
-        sock_write.sendto(WRITE_MESSAGE,(self.UDP_IP, port))
+        self.sock_write.sendto(WRITE_MESSAGE,(self.UDP_IP, port))
+
+    def write_reg(self, reg, val):
+        write_dict = {"command": "write",
+                      "reg": int(reg),
+                      "val": int(val)}
+        self.send_queue.put(write_dict)
+        self.logger.debug(f"Writing {hex(val)} to Register {hex(reg)}")
+
+    def read_reg(self, reg):
+        read_dict = {"command": "read",
+                      "reg": int(reg)}
+        self.send_queue.put(read_dict)
+        self.logger.debug(f"Reading Register {hex(reg)}")
+        while not self.stop_event.is_set():
+            resp = self.processing.reg_output_queue.get(True, self.read_timeout)
+            self.processing.reg_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"read_reg has been told to stop. Exiting...")
+                break
+            self.logger.debug(f"Read back {hex(resp['data'])}")
+            return resp["data"]
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
@@ -266,13 +270,49 @@ class LuSEE_ETHERNET:
         self.write_cdi_reg(self.latch_register, 0)
         time.sleep(self.wait_time)
 
-    def start(self):
+    def request_fw_packet(self):
         self.write_reg(self.start_tlm_data, 1)
         self.write_reg(self.start_tlm_data, 0)
 
     def request_sw_packet(self):
         self.write_reg(self.tlm_reg, 1)
         self.write_reg(self.tlm_reg, 0)
+
+    def get_adc_data(self, timeout = 1):
+        self.logger.debug(f"Waiting for data")
+        while not self.stop_event.is_set():
+            resp = self.processing.adc_output_queue.get(True, timeout)
+            self.processing.adc_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"get_adc_data has been told to stop. Exiting...")
+                break
+            if (not self.processing.adc_output_queue.empty()):
+                self.logger.warning(f"ADC queue still has {self.processing.adc_output_queue.qsize()} items")
+            return resp
+
+    def get_count_data(self, timeout = 1):
+        self.logger.debug(f"Waiting for Count data")
+        while not self.stop_event.is_set():
+            resp = self.processing.count_output_queue.get(True, timeout)
+            self.processing.count_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"get_count_data has been told to stop. Exiting...")
+                break
+            if (not self.processing.count_output_queue.empty()):
+                self.logger.warning(f"Count queue still has {self.processing.count_output_queue.qsize()} items")
+            return resp
+
+    def get_pfb_data(self, timeout = 1):
+        self.logger.debug(f"Waiting for PFB data")
+        while not self.stop_event.is_set():
+            resp = self.processing.pfb_output_queue.get(True, timeout)
+            self.processing.pfb_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"get_pfb_data has been told to stop. Exiting...")
+                break
+            if (not self.processing.pfb_output_queue.empty()):
+                self.logger.warning(f"PFB queue still has {self.processing.pfb_output_queue.qsize()} items")
+            return resp
 
     def get_data_packets(self, data_type, num=1, header = False):
         if ((data_type != "adc") and (data_type != "fft") and (data_type != "sw") and (data_type != "cal")):
@@ -332,14 +372,12 @@ if __name__ == "__main__":
     logging.config.fileConfig(config_path)
 
     e = LuSEE_ETHERNET()
-
-    # e.write_reg(0x121, 0x69)
-    # print("Wrote")
-    # time.sleep(1)
-    # e.read_reg(0x121)
-
-    #e.write_reg(122, 68)
-    #e.read_reg(122)
+    e.write_reg(0x121, 0x69)
+    resp = e.read_reg(0x121)
+    if (resp != 0x69):
+        e.logger.error(f"Response was {resp}")
+    else:
+        e.logger.info(f"Response was {resp}")
 
     try:
         while True:
