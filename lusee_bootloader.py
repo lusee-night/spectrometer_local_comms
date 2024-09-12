@@ -22,10 +22,8 @@ class LuSEE_BOOTLOADER:
         self.WRITE_TO_FLASH = 0xB0000B
         self.WRITE_METADATA = 0xB0000C
         self.DELETE_FLASH_REGION = 0xB0000D
-        self.QUICK_DDR_TEST = 0xB0000E
-        self.FULL_DDR_TEST = 0xB0000F
+        self.FINAL_HEX_LINE = "0000fc4f"
 
-        self.RESET_UC = 0xBFFFFF
         self.SEND_PROGRAM_TO_DCB = 0xB00009
         self.UC_REG = 0x100
         self.BL_RESET = 0x0
@@ -47,6 +45,9 @@ class LuSEE_BOOTLOADER:
         self.bootloader_metadata_size_reg = 0x630
         self.bootloader_metadata_checksum_reg = 0x631
 
+    def stop(self):
+        self.connection.stop()
+
     #With the type of sensitive bootloader operations we are doing here, it will be good to write the response packets to file
     def write_to_file(self, s):
         f = open(f"{self.debug_file}", 'a+')
@@ -57,11 +58,12 @@ class LuSEE_BOOTLOADER:
     #Restarts the C program and gets a confirmation packet that it did
     def init_bootloader(self):
         #Send reset microcontroller packet
-        self.connection.send_bootloader_message(self.RESET_UC)
-        self.logger.debug("Reset, waiting for response")
+        self.connection.write_reg(self.UC_REG, 1)
+        self.connection.write_reg(self.UC_REG, 0)
+        self.logger.info(f"Signal sent to reset to bootloader")
         resp = self.connection.read_hk_message()
         self.write_to_file(resp)
-        if (int(resp[0]['BL_Message'], 16) == self.connection.BL_RESET):
+        if (int(resp['BL_Message'], 16) == self.BL_RESET):
             self.logger.info(f"Microcontroller reset")
         else:
             sys.exit(f"{self.name}Microcontroller was not reset. Response was {resp}")
@@ -81,10 +83,10 @@ class LuSEE_BOOTLOADER:
         self.connection.send_bootloader_message(self.LAUNCH_SW)
         resp = self.connection.read_hk_message()
         self.write_to_file(resp)
-        if (resp[0]["default_vals_loaded"]):
-            self.logger.info(f"Program jumped to region {resp[0]['region_jumped_to']} with default values loaded")
+        if (resp["default_vals_loaded"]):
+            self.logger.info(f"Program jumped to region {resp['region_jumped_to']} with default values loaded")
         else:
-            self.logger.info(f"Program jumped to region {resp[0]['region_jumped_to']} with without loading default values")
+            self.logger.info(f"Program jumped to region {resp['region_jumped_to']} with without loading default values")
 
     #Gets info on all stored programs, and which ones are currently in memory
     def get_program_info(self):
@@ -94,8 +96,29 @@ class LuSEE_BOOTLOADER:
 
     #Reads back the program, the full hex file for a comparison
     def read_loaded_program(self):
-        self.connection.send_bootloader_message(self.connection.SEND_PROGRAM_TO_DCB)
-        resp = self.connection.read_hk_message()
+        self.connection.send_bootloader_message(self.SEND_PROGRAM_TO_DCB)
+        file_readback = []
+        self.logger.info("Listening for program readback")
+        page = 0
+        while(True):
+            self.logger.info(f"Recieved page {page}")
+            resp = self.connection.read_hk_message()
+            file_readback.append(resp)
+            if (self.FINAL_HEX_LINE in resp['data']):
+                break
+            page += 1
+        self.logger.info("Read entire file")
+        lines_per_file = file_readback[0]['lines']
+        orig = self.open_file()
+        for i in range(len(orig)):
+            index = i//lines_per_file
+            num = i%lines_per_file
+            readback_line = file_readback[index]['data'][num]
+            if (orig[i] != int(readback_line, 16)):
+                self.logger.warning(f"Mismatch in reading back program. Comparing to f{self.file_path}. Line {i} in file is {hex(orig[i])}. In readback, it's {readback_line}")
+            else:
+                print(f"{orig[i]} matched {int(readback_line, 16)}")
+        self.logger.info("Comparison Complete")
 
     #Deletes the default settings that were used for bootup in the memory. Does not get a confirmation packet
     def delete_spectrometer_defaults(self):
@@ -110,16 +133,6 @@ class LuSEE_BOOTLOADER:
         self.connection.send_bootloader_message(self.DELETE_FLASH_REGION + (region << 8))
         self.logger.info(f"Command sent to delete region {region}")
         time.sleep(2) #Without the wait, the next commands don't get registered
-
-    #Begins a quick DDR test, does not get a confirmation packet
-    def ddr_quick_test(self):
-        self.connection.send_bootloader_message(self.QUICK_DDR_TEST)
-        self.logger.info(f"Command sent to begin quick DDR test")
-
-    #Begins a full DDR test, does not get a confirmation packet
-    def ddr_full_test(self):
-        self.connection.send_bootloader_message(self.FULL_DDR_TEST)
-        self.logger.info(f"Command sent to begin full, exhaustive DDR test")
 
     #Converts from the raw sum total after counting values to the two's complement checksum used in the Intel Hex File format and Jack's bootloader
     #Takes the number of bits to use to convert as well, because Python has to be a pain in the ass about bitwise inversion
@@ -252,18 +265,22 @@ if __name__ == "__main__":
     config_path = os.path.join(script_dir, relative_path)
     logging.config.fileConfig(config_path)
 
+
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
     boot.init_bootloader()
     time.sleep(0.1)
-    #boot.remain()
+    # boot.remain()
     # boot.get_program_info()
-    # boot.load_region(region = 1)
-    # boot.get_program_info()
-    # boot.read_loaded_program()
-    #boot.ddr_quick_test()
-
+    boot.load_region(region = 1)
     boot.file_path = sys.argv[1]
-    boot.delete_region(region = 1)
-    boot.write_hex_bootloader(region = 1)
-    boot.launch_software()
+    boot.read_loaded_program()
+
+    # boot.file_path = sys.argv[1]
+    # boot.delete_region(region = 1)
+    # boot.write_hex_bootloader(region = 1)
+    # boot.load_region(region = 1)
+    # boot.launch_software()
+
+    boot.stop()
+    sys.exit()

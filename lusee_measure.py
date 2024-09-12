@@ -21,6 +21,9 @@ class LuSEE_MEASURE:
         self.subtitle_size = 28
         self.label_size = 28
 
+    def stop(self):
+        self.comm.stop()
+
     def set_all_adc_ramp(self):
         self.comm.write_adc(0, 0x42, 0x08) #Enable digital functions on ADC0
         self.comm.write_adc(1, 0x42, 0x08) #Enable digital functions on ADC1
@@ -476,4 +479,4 @@ if __name__ == "__main__":
         sys.exit()
 
     measure.start_test(arg)
-    measure.comm.stop()
+    measure.stop()

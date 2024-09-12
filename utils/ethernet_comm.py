@@ -11,71 +11,81 @@ from datetime import datetime
 from utils import LuSEE_PROCESSING
 
 class LuSEE_ETHERNET:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls, *args, **kwargs)
+        return cls._instance
+
     def __init__(self):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.debug("Class created")
+        if not hasattr(self, '_initialized'):
+            self._initialized = True
+            self.logger = logging.getLogger(self.__class__.__name__)
+            self.logger.debug("Class created")
 
-        self.UDP_IP = "192.168.121.1"
-        self.PC_IP = "192.168.121.50"
-        self.read_timeout = 1
+            self.UDP_IP = "192.168.121.1"
+            self.PC_IP = "192.168.121.50"
+            self.read_timeout = 1
 
-        self.PORT_WREG = 32000
-        self.PORT_RREG = 32001
-        self.PORT_RREGRESP = 32002
-        self.PORT_HSDATA = 32003
-        self.PORT_HK = 32004
-        self.BUFFER_SIZE = 9014
+            self.PORT_WREG = 32000
+            self.PORT_RREG = 32001
+            self.PORT_RREGRESP = 32002
+            self.PORT_HSDATA = 32003
+            self.PORT_HK = 32004
+            self.BUFFER_SIZE = 9014
 
-        self.KEY1 = 0xDEAD
-        self.KEY2 = 0xBEEF
-        self.FOOTER = 0xFFFF
+            self.KEY1 = 0xDEAD
+            self.KEY2 = 0xBEEF
+            self.FOOTER = 0xFFFF
 
-        self.wait_time = 0.01
+            self.wait_time = 0.01
+            self.cdi_wait_time = 0.1
 
-        self.start_tlm_data = 0x210
-        self.tlm_reg = 0x218
+            self.start_tlm_data = 0x210
+            self.tlm_reg = 0x218
 
-        self.latch_register = 0x1
-        self.write_register = 0x2
-        self.action_register = 0x4
-        self.readback_register = 0xB
+            self.latch_register = 0x1
+            self.write_register = 0x2
+            self.action_register = 0x4
+            self.readback_register = 0xB
 
-        self.cdi_reset = 0x0
-        self.spectrometer_reset = 0x0
+            self.cdi_reset = 0x0
+            self.spectrometer_reset = 0x0
 
-        self.address_read = 0xA30000
-        self.address_write = 0xA20000
-        self.first_data_pack = 0xA00000
-        self.second_data_pack = 0xA10000
+            self.address_read = 0xA30000
+            self.address_write = 0xA20000
+            self.first_data_pack = 0xA00000
+            self.second_data_pack = 0xA10000
 
-        self.max_packet = 0x7FB
-        self.exception_registers = [0x0, 0x200, 0x240, 0x241, 0x300, 0x303, 0x400, 0x500, 0x600, 0x700, 0x703, 0x800]
+            self.max_packet = 0x7FB
+            self.exception_registers = [0x0, 0x200, 0x240, 0x241, 0x300, 0x303, 0x400, 0x500, 0x600, 0x700, 0x703, 0x800]
 
-        self.stop_event = threading.Event()
-        self.processing = LuSEE_PROCESSING()
+            self.stop_event = threading.Event()
+            self.processing = LuSEE_PROCESSING()
 
-        self.dummy_socket, self.dummy_socket_wakeup = socket.socketpair()
-        listening_thread_settings = [("Register Respones Thread", self.PORT_RREGRESP, self.processing.reg_input_queue),
-                                    ("Data Thread", self.PORT_HSDATA, self.processing.data_input_queue),
-                                    ("Housekeeping Thread", self.PORT_HK, self.processing.hk_input_queue)]
-        self.listen_threads = []
-        for listen_settings in listening_thread_settings:
-            thread = threading.Thread(target=self.listener,
-                        name=listen_settings[0],
-                        daemon = True,
-                        args=(listen_settings[1], listen_settings[2])
-                        )
-            thread.start()
-            self.listen_threads.append(thread)
+            self.dummy_socket, self.dummy_socket_wakeup = socket.socketpair()
+            listening_thread_settings = [("Register Response Thread", self.PORT_RREGRESP, self.processing.reg_input_queue),
+                                        ("Data Thread", self.PORT_HSDATA, self.processing.data_input_queue),
+                                        ("Housekeeping Thread", self.PORT_HK, self.processing.hk_input_queue)]
+            self.listen_threads = []
+            for listen_settings in listening_thread_settings:
+                thread = threading.Thread(target=self.listener,
+                            name=listen_settings[0],
+                            daemon = True,
+                            args=(listen_settings[1], listen_settings[2])
+                            )
+                thread.start()
+                self.listen_threads.append(thread)
 
-        #Set up socket for IPv4 and UDP
-        self.sock_write = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.stop_signal = object()
-        self.send_queue = queue.Queue()
-        self.send_thread = threading.Thread(target=self.sender,
-                            name="Sender Thread",
-                            daemon = True)
-        self.send_thread.start()
+            #Set up socket for IPv4 and UDP
+            self.sock_write = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            self.stop_signal = object()
+            self.send_queue = queue.Queue()
+            self.send_thread = threading.Thread(target=self.sender,
+                                name="Sender Thread",
+                                daemon = True)
+            self.send_thread.start()
 
     def stop(self):
         self.logger.debug("Stopping all threads")
@@ -84,8 +94,10 @@ class LuSEE_ETHERNET:
         self.logger.debug(f"Waiting for {self.send_thread.name} to join")
         self.send_thread.join()
         self.logger.debug(f"Class sees that {self.send_thread.name} is done")
-
-        self.dummy_socket_wakeup.send(b'\x00')
+        try:
+            self.dummy_socket_wakeup.send(b'\x00')
+        except OSError:
+            pass
         for i in self.listen_threads:
             self.logger.debug(f"Waiting for {i.name} to join")
             i.join()
@@ -234,6 +246,7 @@ class LuSEE_ETHERNET:
                       "val": int(val)}
         self.send_queue.put(write_dict)
         self.logger.debug(f"Writing {hex(val)} to Register {hex(reg)}")
+        time.sleep(self.cdi_wait_time)
 
     def read_reg(self, reg):
         read_dict = {"command": "read",
@@ -247,6 +260,8 @@ class LuSEE_ETHERNET:
                 self.logger.debug(f"read_reg has been told to stop. Exiting...")
                 break
             self.logger.debug(f"Read back {hex(resp['data'])}")
+            if (not self.processing.reg_output_queue.empty()):
+                self.logger.warning(f"Register queue still has {self.processing.reg_output_queue.qsize()} items")
             return resp["data"]
 
     def send_bootloader_message(self, message):
@@ -260,7 +275,9 @@ class LuSEE_ETHERNET:
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"read_reg has been told to stop. Exiting...")
                 break
-            self.logger.debug(f"Read back {hex(resp['data'])}")
+            self.logger.debug(f"Read back {resp}")
+            if (not self.processing.hk_output_queue.empty()):
+                self.logger.warning(f"Housekeeping queue still has {self.processing.hk_output_queue.qsize()} items")
             return resp
 
     def reset(self):

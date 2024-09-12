@@ -1,7 +1,10 @@
+import struct
 import threading
 import queue
 import logging
 import logging.config
+
+from datetime import datetime
 
 class LuSEE_PROCESS_HK:
     def __init__(self, parent):
@@ -22,8 +25,7 @@ class LuSEE_PROCESS_HK:
             if data is self.stop_signal:
                 self.logger.debug(f"{name} has been told to stop. Exiting...")
                 break
-
-            self.hk_output_queue.put(check_data_bootloader(data))
+            self.hk_output_queue.put(self.check_data_bootloader(data))
         self.logger.debug(f"{name} exited")
 
     #The bootloader response has the standard CDI header, so that's formatted
@@ -49,8 +51,8 @@ class LuSEE_PROCESS_HK:
             bootloader_resp = self.unpack_bootloader_packet(formatted_data3)
         else:
             bootloader_resp = None
-
-        return header_dict.update(bootloader_resp)
+        header_dict.update(bootloader_resp)
+        return header_dict
 
     #This looks at the common elements of each bootloader response header
     #Depending on the type of packet response, it knows how to process it further
