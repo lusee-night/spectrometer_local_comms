@@ -51,14 +51,6 @@ class LuSEE_ETHERNET:
         self.max_packet = 0x7FB
         self.exception_registers = [0x0, 0x200, 0x240, 0x241, 0x300, 0x303, 0x400, 0x500, 0x600, 0x700, 0x703, 0x800]
 
-        self.RESET_UC = 0xBFFFFF
-        self.SEND_PROGRAM_TO_DCB = 0xB00009
-        self.UC_REG = 0x100
-        self.BL_RESET = 0x0
-        self.BL_JUMP = 0x1
-        self.BL_PROGRAM_CHECK = 0x2
-        self.BL_PROGRAM_VERIFY = 0x3
-
         self.stop_event = threading.Event()
         self.processing = LuSEE_PROCESSING()
 
@@ -256,6 +248,20 @@ class LuSEE_ETHERNET:
                 break
             self.logger.debug(f"Read back {hex(resp['data'])}")
             return resp["data"]
+
+    def send_bootloader_message(self, message):
+        self.write_cdi_reg(self.write_register, message, self.PORT_WREG)
+        self.toggle_cdi_latch()
+
+    def read_hk_message(self):
+        while not self.stop_event.is_set():
+            resp = self.processing.hk_output_queue.get()
+            self.processing.hk_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"read_reg has been told to stop. Exiting...")
+                break
+            self.logger.debug(f"Read back {hex(resp['data'])}")
+            return resp
 
     def reset(self):
         print("Python Ethernet --> Resetting, wait a few seconds")
