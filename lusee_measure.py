@@ -177,6 +177,7 @@ class LuSEE_MEASURE:
                 #self.plotter.plot_notches(i, True, True)
 
         if (self.json_data[f"pfb_sw_save_data"]):
+            self.logger.info("Doing software")
             self.comm.readout_mode("sw")
             all_data, all_headers = self.comm.get_pfb_data_sw(header_return = True)
 

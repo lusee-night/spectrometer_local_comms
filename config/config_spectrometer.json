@@ -24,25 +24,25 @@
 
 "adc1_save_data": true,
 "adc1_plot": true,
-"adc1_plot_show": true,
+"adc1_plot_show": false,
 "adc1_plot_save": true,
 "adc1_plot_overlay": false,
 
 "adc2_save_data": true,
 "adc2_plot": true,
-"adc2_plot_show": true,
+"adc2_plot_show": false,
 "adc2_plot_save": true,
 "adc2_plot_overlay": false,
 
 "adc3_save_data": true,
 "adc3_plot": true,
-"adc3_plot_show": true,
+"adc3_plot_show": false,
 "adc3_plot_save": true,
 "adc3_plot_overlay": false,
 
 "adc4_save_data": true,
 "adc4_plot": true,
-"adc4_plot_show": true,
+"adc4_plot_show": false,
 "adc4_plot_save": true,
 "adc4_plot_overlay": false,
 
@@ -91,22 +91,22 @@
 
 "pfb1_fpga_save_data": true,
 "pfb1_fpga_plot": true,
-"pfb1_fpga_plot_show": true,
+"pfb1_fpga_plot_show": false,
 "pfb1_fpga_plot_save": true,
 
 "pfb2_fpga_save_data": true,
 "pfb2_fpga_plot": true,
-"pfb2_fpga_plot_show": true,
+"pfb2_fpga_plot_show": false,
 "pfb2_fpga_plot_save": true,
 
 "pfb3_fpga_save_data": true,
 "pfb3_fpga_plot": true,
-"pfb3_fpga_plot_show": true,
+"pfb3_fpga_plot_show": false,
 "pfb3_fpga_plot_save": true,
 
 "pfb4_fpga_save_data": true,
 "pfb4_fpga_plot": true,
-"pfb4_fpga_plot_show": true,
+"pfb4_fpga_plot_show": false,
 "pfb4_fpga_plot_save": true,
 
 "pfb_sw_save_data": true,

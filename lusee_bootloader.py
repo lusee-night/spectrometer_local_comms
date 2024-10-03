@@ -272,15 +272,15 @@ if __name__ == "__main__":
     time.sleep(0.1)
     # boot.remain()
     # boot.get_program_info()
-    boot.load_region(region = 1)
-    boot.file_path = sys.argv[1]
-    boot.read_loaded_program()
-
-    # boot.file_path = sys.argv[1]
-    # boot.delete_region(region = 1)
-    # boot.write_hex_bootloader(region = 1)
     # boot.load_region(region = 1)
-    # boot.launch_software()
+    # boot.file_path = sys.argv[1]
+    # boot.read_loaded_program()
+
+    boot.file_path = sys.argv[1]
+    boot.delete_region(region = 1)
+    boot.write_hex_bootloader(region = 1)
+    boot.load_region(region = 1)
+    boot.launch_software()
 
     boot.stop()
     sys.exit()

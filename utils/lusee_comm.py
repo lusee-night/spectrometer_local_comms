@@ -692,6 +692,7 @@ class LuSEE_COMMS:
             print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
 
     def get_spec_errors(self):
+        print(f"Lusee_comm getting spec errors")
         print(f"Register 0x432 is {hex(self.connection.read_reg(0x432))}")
         for i in range(0x460, 0x46F+1):
             print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
