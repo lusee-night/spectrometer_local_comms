@@ -58,7 +58,7 @@ class LuSEE_MEASURE:
         self.comm.readout_mode("fpga")
         self.comm.set_function("Counter")
         self.comm.set_counter_num(counter_num)
-        data, header = self.comm.get_counter_data(header = True)
+        data, header = self.comm.get_counter_data()
         return data, header
 
     def to_radian(self, val):
@@ -391,6 +391,7 @@ class LuSEE_MEASURE:
         self.comm.reset_calibrator()
 
     def start_test(self, config_file):
+        #self.comm.connection.write_reg(0x217, 0xFFFF)
         self.logger.info(f"Initializing Test")
         with open(config_file, "r") as jsonfile:
             self.json_data = json.load(jsonfile)
@@ -452,13 +453,13 @@ if __name__ == "__main__":
     else:
         sys.exit("You need to supply an argument")
     measure = LuSEE_MEASURE()
-    measure.comm.connection.write_cdi_reg(5, 69, 32000)
-    resp = measure.comm.connection.read_cdi_reg(5)
-    if (resp["data"] == 69):
-        measure.logger.info("Communication to DCB Emulator is ok")
-    else:
-        measure.logger.critical(f"Communication to DCB Emulator is not ok. Response was {resp}")
-        sys.exit()
+    # measure.comm.connection.write_cdi_reg(5, 69, 32000)
+    # resp = measure.comm.connection.read_cdi_reg(5)
+    # if (resp["data"] == 69):
+    #     measure.logger.info("Communication to DCB Emulator is ok")
+    # else:
+    #     measure.logger.critical(f"Communication to DCB Emulator is not ok. Response was {resp}")
+    #     sys.exit()
 
     measure.comm.connection.write_reg(0x120, 69)
     resp = measure.comm.connection.read_reg(0x120)

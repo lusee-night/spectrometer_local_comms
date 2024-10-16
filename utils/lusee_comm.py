@@ -467,7 +467,7 @@ class LuSEE_COMMS:
             self.logger.info(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         else:
             wait_time = 1
-        return self.connection.get_pfb_data(timeout = wait_time)
+        return self.connection.get_pfb_data()
 
     def get_pfb_data_sw(self, header_return = False, avg = None, test = False):
         if (avg != None):

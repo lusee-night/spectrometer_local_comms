@@ -67,17 +67,14 @@ class LuSEE_PROCESSING:
     #Unpack the header files into a dictionary, this is common for all CDI responses
     def organize_header(self, formatted_data):
         header_dict = {}
-        header_dict["udp_packet_num"] = hex((formatted_data[0] << 16) + formatted_data[1])
-        header_dict["header_user_info"] = hex((formatted_data[2] << 48) + (formatted_data[3] << 32) + (formatted_data[4] << 16) + formatted_data[5])
-        header_dict["system_status"] = hex((formatted_data[6] << 16) + formatted_data[7])
-        header_dict["message_id"] = hex(formatted_data[8] >> 10)
-        header_dict["message_length"] = hex(formatted_data[8] & 0x3FF)
-        header_dict["message_spare"] = hex(formatted_data[9])
-        header_dict["ccsds_version"] = hex(formatted_data[10] >> 13)
-        header_dict["ccsds_packet_type"] = hex((formatted_data[10] >> 12) & 0x1)
-        header_dict["ccsds_secheaderflag"] = hex((formatted_data[10] >> 11) & 0x1)
-        header_dict["ccsds_appid"] = hex(formatted_data[10] & 0x7FF)
-        header_dict["ccsds_groupflags"] = hex(formatted_data[11] >> 14)
-        header_dict["ccsds_sequence_cnt"] = hex(formatted_data[11] & 0x3FFF)
-        header_dict["ccsds_packetlen"] = hex(formatted_data[12])
+        header_dict["message_id"] = hex(formatted_data[0] >> 10)
+        header_dict["message_length"] = hex(formatted_data[0] & 0x3FF)
+        header_dict["message_spare"] = hex(formatted_data[1])
+        header_dict["ccsds_version"] = hex(formatted_data[2] >> 13)
+        header_dict["ccsds_packet_type"] = hex((formatted_data[2] >> 12) & 0x1)
+        header_dict["ccsds_secheaderflag"] = hex((formatted_data[2] >> 11) & 0x1)
+        header_dict["ccsds_appid"] = hex(formatted_data[2] & 0x7FF)
+        header_dict["ccsds_groupflags"] = hex(formatted_data[3] >> 14)
+        header_dict["ccsds_sequence_cnt"] = hex(formatted_data[3] & 0x3FFF)
+        header_dict["ccsds_packetlen"] = hex(formatted_data[4])
         return header_dict

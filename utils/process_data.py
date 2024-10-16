@@ -31,6 +31,7 @@ class LuSEE_PROCESS_DATA:
         #This will track the type of data packet we are receiving and what number packet we're on
         current_type = [None, 0]
         running_process = {"header" : {}}
+        self.existing_data = None
         while not self.stop_event.is_set():
             data = self.data_input_queue.get()
             self.data_input_queue.task_done()
@@ -42,8 +43,12 @@ class LuSEE_PROCESS_DATA:
             #Headers come in as 16 bit words
             unpack_buffer = int((len(data))/2)
             #Unpacking into shorts in increments of 2 bytes
-            formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
+            if (self.existing_data):
+                formatted_data = self.existing_data + struct.unpack_from(f">{unpack_buffer}H",data)
+            else:
+                formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
             header = self.parent.organize_header(formatted_data)
+            self.logger.debug(f"Header in data processing is {header}")
             if ((header["ccsds_appid"] in self.fft_apids) and ((current_type[0] == None) or (current_type[0] == "FFT"))):
                 running_process["header"][current_type[1]] = header
                 current_type[1] += 1
@@ -51,13 +56,13 @@ class LuSEE_PROCESS_DATA:
                 if (current_type[1] < self.fft_pkt_num):
                     #The rest of the raw data is after the 13 * 2 byte header
                     if ("raw_data" in running_process):
-                        running_process["raw_data"] += (data[26:])
+                        running_process["raw_data"] += (data[10:])
                     else:
-                        running_process["raw_data"] = data[26:]
+                        running_process["raw_data"] = data[10:]
                     current_type[0] = "FFT"
                 elif (current_type[1] == self.fft_pkt_num):
                     self.logger.debug("Final packet for FFT")
-                    running_process["raw_data"] += (data[26:])
+                    running_process["raw_data"] += (data[10:])
 
                     #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
                     formatted_data2 = struct.unpack_from(">2048I",running_process["raw_data"])
@@ -77,17 +82,26 @@ class LuSEE_PROCESS_DATA:
                 running_process["header"][current_type[1]] = header
                 current_type[1] += 1
                 self.logger.debug(f"This is packet #{current_type[1]} in an ADC sequence")
+                packet_size = int(int(header['ccsds_packetlen'], 16)/2)
                 if (current_type[1] < self.adc_pkt_num):
                     #The rest of the raw data is after the 13 * 2 byte header
                     #For the ADC, there's no chance of data stradding 2 packets, so it can be put in as a 16 bit value
                     if ("data" in running_process):
-                        running_process["data"].extend(formatted_data[13:])
+                        running_process["data"].extend(formatted_data[5:])
                     else:
-                        running_process["data"] = list(formatted_data[13:])
+                        running_process["data"] = list(formatted_data[5:])
+
                     current_type[0] = "ADC"
+                    if (len(data) < int(header["ccsds_packetlen"], 16)):
+                        self.logger.warning(f"The header said the length would be {int(header['ccsds_packetlen'], 16)} and the actual length is {len(data)}")
+                        self.adc_output_queue.put(running_process)
+                        current_type = [None, 0]
+                        running_process = {"header" : {}}
+                    #self.adc_output_queue.put(running_process)
+                    #self.logger.debug("ADC donzo")
                 elif (current_type[1] == self.adc_pkt_num):
                     self.logger.debug("Final packet for ADC")
-                    running_process["data"].extend(formatted_data[13:])
+                    running_process["data"].extend(formatted_data[5:])
                     self.adc_output_queue.put(running_process)
                     current_type = [None, 0]
                     running_process = {"header" : {}}
@@ -105,7 +119,7 @@ class LuSEE_PROCESS_DATA:
                         continue
                     else:
                         self.count_pkt_num = (self.count_num // self.bytes_per_packet) + 1
-                        running_process["data"] = list(formatted_data[13:])
+                        running_process["data"] = list(formatted_data[5:])
                         if (self.count_pkt_num == 1):
                             self.count_output_queue.put(running_process)
                             current_type = [None, 0]
@@ -117,13 +131,13 @@ class LuSEE_PROCESS_DATA:
                     continue
                 elif (current_type[1] < self.count_pkt_num):
                     if ("data" in running_process):
-                        running_process["data"].extend(formatted_data[13:])
+                        running_process["data"].extend(formatted_data[5:])
                     else:
                         self.logger.error(f"Counter packet receiving state machine has middle packets before first!")
                     current_type[0] = "Count"
                 elif (current_type[1] == self.count_pkt_num):
                     self.logger.debug("Final packet for Counter")
-                    running_process["data"].extend(formatted_data[13:])
+                    running_process["data"].extend(formatted_data[5:])
                     self.count_output_queue.put(running_process)
                     current_type = [None, 0]
                     running_process = {"header" : {}}

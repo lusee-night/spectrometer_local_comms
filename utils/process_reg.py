@@ -1,6 +1,7 @@
 import binascii
 import threading
 import queue
+import struct
 import logging
 import logging.config
 
@@ -27,24 +28,20 @@ class LuSEE_PROCESS_REG:
                 self.logger.debug(f"{name} has been told to stop. Exiting...")
                 self.reg_output_queue.put(self.stop_signal)
                 break
-            dataHex = binascii.hexlify(data)
-            #If reading, say register 0x290, you may get back
-            #029012345678
-            #The first 4 bits are the register you requested, the next 8 bits are the value
-            #With a DCB emulator, those first 4 bits will be the register on the DCB emulator you requested
-            #The register from the spectrometer is lost in the middle
-            #Return the data part of the response in integer form (it's just easier)
-            response_reg = int(dataHex[0:4],16)
-            data_val = int(dataHex[4:12],16)
+            data_packet = bytearray()
+            header_dict = {}
+
+            unpack_buffer = int((len(data))/2)
+            #Unpacking into shorts in increments of 2 bytes
+            formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
+            header_dict = self.parent.organize_header(formatted_data)
+            self.logger.debug(f"Header dictionary is {header_dict}")
+            response_reg = int(formatted_data[5])
+            data_val = int((formatted_data[6] << 16) + formatted_data[7])
 
             response_dict = {"reg": response_reg,
                              "data": data_val}
             self.logger.debug(f"Received {response_dict}")
-            if (response_reg != self.readback_register):
-                #This queue is the response for when toggling the latch, or actual DCB emulator registers
-                self.dcb_emulator_queue.put(response_dict)
-            else:
-                #This one is when the DCB emulator is reporting on Spectrometer registers
-                self.reg_output_queue.put(response_dict)
+            self.reg_output_queue.put(response_dict)
         self.logger.debug(f"{name} exited")
 

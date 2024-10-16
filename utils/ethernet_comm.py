@@ -8,6 +8,7 @@ import select
 import logging
 import logging.config
 from datetime import datetime
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 from utils import LuSEE_PROCESSING
 
 class LuSEE_ETHERNET:
@@ -24,10 +25,12 @@ class LuSEE_ETHERNET:
             self.logger = logging.getLogger(self.__class__.__name__)
             self.logger.debug("Class created")
 
+            self.TCP_IP = 'localhost'
             self.UDP_IP = "192.168.121.1"
             self.PC_IP = "192.168.121.50"
-            self.read_timeout = 1
+            self.read_timeout = 5
 
+            self.PORT_TCP = 5004
             self.PORT_WREG = 32000
             self.PORT_RREG = 32001
             self.PORT_RREGRESP = 32002
@@ -61,13 +64,21 @@ class LuSEE_ETHERNET:
             self.max_packet = 0x7FB
             self.exception_registers = [0x0, 0x200, 0x240, 0x241, 0x300, 0x303, 0x400, 0x500, 0x600, 0x700, 0x703, 0x800]
 
+            self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_address = (self.TCP_IP, self.PORT_TCP)
+            self.tcp_socket.connect(server_address)
+
             self.stop_event = threading.Event()
             self.processing = LuSEE_PROCESSING()
 
+            self.ssl_delimiter = 0xEB90
+
             self.dummy_socket, self.dummy_socket_wakeup = socket.socketpair()
-            listening_thread_settings = [("Register Response Thread", self.PORT_RREGRESP, self.processing.reg_input_queue),
-                                        ("Data Thread", self.PORT_HSDATA, self.processing.data_input_queue),
-                                        ("Housekeeping Thread", self.PORT_HK, self.processing.hk_input_queue)]
+            # listening_thread_settings = [("Register Response Thread", self.PORT_RREGRESP, self.processing.reg_input_queue),
+            #                             ("Data Thread", self.PORT_HSDATA, self.processing.data_input_queue),
+            #                             ("Housekeeping Thread", self.PORT_HK, self.processing.hk_input_queue)]
+
+            listening_thread_settings = [("Single thread", self.PORT_RREGRESP, self.processing.reg_input_queue)]
             self.listen_threads = []
             for listen_settings in listening_thread_settings:
                 thread = threading.Thread(target=self.listener,
@@ -79,7 +90,7 @@ class LuSEE_ETHERNET:
                 self.listen_threads.append(thread)
 
             #Set up socket for IPv4 and UDP
-            self.sock_write = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
             self.stop_signal = object()
             self.send_queue = queue.Queue()
             self.send_thread = threading.Thread(target=self.sender,
@@ -107,22 +118,51 @@ class LuSEE_ETHERNET:
 
     def listener(self, port, q):
         name = threading.current_thread().name
-        self.logger.debug(f"{name} started, will listen at {self.PC_IP}:{port}")
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind((self.PC_IP, port))
+        self.logger.debug(f"{name} started, will listen")
         try:
             while not self.stop_event.is_set():
                 #This checks the sockets at an OS level and blocks unless there's data in any of the two sockets
                 #This is needed to gracefully exit when recvfrom blocks and wont get any signal in the thread
-                ready, _, _ = select.select([sock, self.dummy_socket], [], [], None)
+                ready, _, _ = select.select([self.tcp_socket, self.dummy_socket], [], [], None)
                 if self.dummy_socket in ready:
                     self.logger.debug(f"{name} has been told to stop. Exiting...")
                     break
-                if sock in ready:
+                if self.tcp_socket in ready:
+                    self.logger.debug("TCP socket is ready")
                     try:
-                        data, addr = sock.recvfrom(self.BUFFER_SIZE)
-                        self.logger.debug(f"Received data in {name} from {addr}")
-                        q.put(data)
+                        data = self.tcp_socket.recv(self.BUFFER_SIZE)
+                        self.logger.debug(f"Received data in {name}, it's {data}")
+
+                        unpack_buffer = int((len(data))/2)
+                        formatted_data = struct.unpack_from(f">{unpack_buffer}H",data)
+                        if (formatted_data[0] != self.ssl_delimiter):
+                            self.logger.error(f"The first 2 bytes of the packet were {hex(formatted_data[0])}, not {hex(self.ssl_delimiter)}!")
+                            sys.exit("Delimiter error")
+                        header_dict = self.processing.organize_header(formatted_data[1:])
+                        cdi_packet_size = int(header_dict['ccsds_packetlen'], 16)
+                        if (int(header_dict["ccsds_appid"], 16) == 0x200):
+                            extra_packets = 12
+                        else:
+                            extra_packets = 13
+                        if (len(data) != cdi_packet_size+extra_packets): #Account for the delimiter 0xEB90
+                            self.logger.warning(f"CDI packet is supposed to have a size of {cdi_packet_size}, however, we only received {len(data)}")
+                            self.tcp_socket.settimeout(1)
+                            while (len(data) < cdi_packet_size+extra_packets):  #Account for delimiter 0xEB90
+                                try:
+                                    packet = self.tcp_socket.recv(cdi_packet_size+extra_packets - len(data))  #Receive the remaining bytes needed only, although may receive less
+                                except socket.timeout:
+                                    self.logger.warning(f"Socket timed out trying to get a length of {cdi_packet_size+extra_packets}. Returning packet with a current length of {len(data)}")
+                                    break
+                                data += packet
+                            self.logger.warning(f"CDI packet with size of {cdi_packet_size+extra_packets} is now matched by data with {len(data)}")
+                            self.tcp_socket.settimeout(None)
+
+                        self.logger.debug(f"Incoming APID is {header_dict['ccsds_appid']}")
+                        self.logger.debug(f"First few bytes are {data[:4]} and last few bytes are {data[-4:]}")
+                        if (int(header_dict["ccsds_appid"], 16) == 0x200):
+                            self.processing.reg_input_queue.put(data[2:])
+                        else:
+                            self.processing.data_input_queue.put(data[2:])
                     except OSError as e:
                         self.logger.debug(f"OSError in {name}: {e}")
                         break
@@ -130,8 +170,8 @@ class LuSEE_ETHERNET:
             self.logger.debug(f"Exception in {name}: {e}")
         finally:
             self.logger.debug(f"{name} finally")
-            if sock:
-                sock.close()
+            if self.tcp_socket:
+                self.tcp_socket.close()
             if self.dummy_socket:
                 self.logger.debug(f"{name} sees dummy socket")
                 self.dummy_socket.close()
@@ -163,82 +203,66 @@ class LuSEE_ETHERNET:
                 dataValLSB = val & 0xFFFF
 
                 dataMSB = self.first_data_pack + dataValMSB
-                self.write_cdi_reg(self.write_register, dataMSB, self.PORT_WREG)
+                self.write_cdi_reg(dataMSB)
                 time.sleep(self.wait_time)
-                self.toggle_cdi_latch()
+                #self.toggle_cdi_latch()
 
                 dataLSB = self.second_data_pack + dataValLSB
-                self.write_cdi_reg(self.write_register, dataLSB, self.PORT_WREG)
+                self.write_cdi_reg(dataLSB)
                 time.sleep(self.wait_time)
-                self.toggle_cdi_latch()
+                #self.toggle_cdi_latch()
 
                 address_value = self.address_write + reg
-                self.write_cdi_reg(self.write_register, address_value, self.PORT_WREG)
+                self.write_cdi_reg(address_value)
                 time.sleep(self.wait_time)
-                self.toggle_cdi_latch()
+                #self.toggle_cdi_latch()
             elif (task["command"] == "read"):
                 reg = int(task["reg"])
                 self.logger.debug(f"Thread is reading Register {hex(reg)}")
 
                 address_value = self.address_read + reg
                 #Tells the DCB emulator which register to read
-                self.write_cdi_reg(self.write_register, address_value, self.PORT_WREG)
+                self.write_cdi_reg(address_value)
                 time.sleep(self.wait_time)
-                self.toggle_cdi_latch()
+                #self.toggle_cdi_latch()
                 #Tells the DCB emulator the command to read
-                self.write_cdi_reg(self.readback_register, 0, self.PORT_RREG)
+                #self.write_cdi_reg(self.readback_register, 0, self.PORT_RREG)
             elif (task["command"] == "write_bootloader"):
                 self.logger.info(f"Writing {hex(task['message'])} to the bootloader")
-                self.write_cdi_reg(self.write_register, task["message"])
+                self.write_cdi_reg(task["message"])
                 time.sleep(self.wait_time)
-                self.toggle_cdi_latch()
+                #self.toggle_cdi_latch()
             else:
                 self.logger.warning(f"Unknown command in send queue: {task}")
 
-        self.sock_write.close()
+        self.tcp_socket.close()
         self.logger.debug(f"{name} exited")
 
-    def toggle_cdi_latch(self):
-        self.write_cdi_reg(self.latch_register, 1, self.PORT_WREG)
-        time.sleep(self.wait_time)
-        self.write_cdi_reg(self.latch_register, 0, self.PORT_WREG)
-        attempt = 0
-        while True:
-            resp = self.read_cdi_reg(self.latch_register)
-            if resp is self.processing.stop_signal:
-                self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
-                break
-            if (resp["data"] >> 31):
-                self.logger.debug(f"toggle_cdi_latch was successful outer loop")
-                break
-            else:
-                attempt += 1
-            if (attempt > 10):
-                self.logger.warning(f"toggle_cdi_latch was unable to see the latch register complete. Returned {resp}")
-                break
+    def write_cdi_reg(self, data):
+        dataVal = int(data)
+        dataValMSB = ((dataVal >> 16) & 0xFF)
+        dataValLSB = dataVal & 0xFFFF
+        WRITE_MESSAGE = struct.pack('>BH', dataValMSB, dataValLSB)
+        self.logger.debug(f"Writing {WRITE_MESSAGE}")
 
-    def read_cdi_reg(self, reg):
-        self.logger.debug(f"Reading CD Register {hex(reg)}")
-        self.write_cdi_reg(int(reg), 0, self.PORT_RREG)
-        while not self.stop_event.is_set():
-            resp = self.processing.dcb_emulator_queue.get(True, self.read_timeout)
-            self.processing.dcb_emulator_queue.task_done()
-            if resp is self.processing.stop_signal:
-                self.logger.debug(f"toggle_cdi_latch has been told to stop. Exiting...")
-                break
-            else:
-                return resp
+        #sock_write = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    def write_cdi_reg(self, reg, data, port):
-        self.logger.debug(f"Writing {hex(data)} to CDI Register {hex(reg)}")
-        #Splits the register up, since both halves need to go through socket.htons seperately
-        dataValMSB = ((data >> 16) & 0xFFFF)
-        dataValLSB = data & 0xFFFF
-        WRITE_MESSAGE = struct.pack('HHHHHHHHH',socket.htons(self.KEY1), socket.htons(self.KEY2),
-                                    socket.htons(reg),socket.htons(dataValMSB),
-                                    socket.htons(dataValLSB),socket.htons(self.FOOTER), 0x0, 0x0, 0x0)
+        # Define the server address and port
+        #server_address = ("130.130.130.130", 10000)
 
-        self.sock_write.sendto(WRITE_MESSAGE,(self.UDP_IP, port))
+        # Connect the socket to the server
+        #sock_write.connect(server_address)
+
+        try:
+            # Send data
+            #message = '"\A0\00\00"
+            self.tcp_socket.sendall(WRITE_MESSAGE)
+
+            # data = sock_write.recv(1024)
+            # print('Received:', data.decode())
+        except:
+            self.logger.debug(f"Python Ethernet --> Couldn't write on {hex(reg)}, trying again...")
+
 
     def write_reg(self, reg, val):
         write_dict = {"command": "write",
@@ -265,8 +289,8 @@ class LuSEE_ETHERNET:
             return resp["data"]
 
     def send_bootloader_message(self, message):
-        self.write_cdi_reg(self.write_register, message, self.PORT_WREG)
-        self.toggle_cdi_latch()
+        self.write_cdi_reg(message)
+        #self.toggle_cdi_latch()
 
     def read_hk_message(self):
         while not self.stop_event.is_set():
@@ -286,11 +310,6 @@ class LuSEE_ETHERNET:
         time.sleep(3)
         self.write_reg(self.spectrometer_reset,0)
         time.sleep(2)
-        self.write_cdi_reg(self.cdi_reset,1)
-        time.sleep(2)
-        self.write_cdi_reg(self.cdi_reset,0)
-        time.sleep(1)
-        self.write_cdi_reg(self.latch_register, 0)
         time.sleep(self.wait_time)
 
     def request_fw_packet(self):
@@ -301,7 +320,7 @@ class LuSEE_ETHERNET:
         self.write_reg(self.tlm_reg, 1)
         self.write_reg(self.tlm_reg, 0)
 
-    def get_adc_data(self, timeout = 1):
+    def get_adc_data(self, timeout = 10):
         self.logger.debug(f"Waiting for data")
         while not self.stop_event.is_set():
             resp = self.processing.adc_output_queue.get(True, timeout)
@@ -313,7 +332,7 @@ class LuSEE_ETHERNET:
                 self.logger.warning(f"ADC queue still has {self.processing.adc_output_queue.qsize()} items")
             return resp
 
-    def get_count_data(self, timeout = 1):
+    def get_count_data(self, timeout = 10):
         self.logger.debug(f"Waiting for Count data")
         while not self.stop_event.is_set():
             resp = self.processing.count_output_queue.get(True, timeout)
@@ -325,7 +344,7 @@ class LuSEE_ETHERNET:
                 self.logger.warning(f"Count queue still has {self.processing.count_output_queue.qsize()} items")
             return resp
 
-    def get_pfb_data(self, timeout = 1):
+    def get_pfb_data(self, timeout = 10):
         self.logger.debug(f"Waiting for PFB data")
         while not self.stop_event.is_set():
             resp = self.processing.pfb_output_queue.get(True, timeout)
@@ -342,11 +361,6 @@ class LuSEE_ETHERNET:
             print(f"Python Ethernet --> Error in 'get_data_packets': Must request 'adc' or 'fft' or 'sw' as 'data_type'. You requested {data_type}")
             return []
         numVal = int(num)
-        #set up IPv4, UDP listening socket at requested IP
-        sock_data = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock_data.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock_data.bind((self.PC_IP,self.PORT_HSDATA))
-        sock_data.settimeout(self.udp_timeout)
         #Read a certain amount of packets
         incoming_packets = []
         if (data_type != 'sw' and data_type != 'cal'):
@@ -354,29 +368,21 @@ class LuSEE_ETHERNET:
         else:
             self.request_sw_packet()
 
+        self.logger.debug(f"Waiting for Software data")
+
+
         for packet in range(0,numVal,1):
-            data = []
-            try:
-                data = sock_data.recv(self.BUFFER_SIZE)
-            except socket.timeout:
-                    print ("Python Ethernet --> Error get_data_packets: No data packet received from board, quitting")
-                    print ("Python Ethernet --> Socket was {}".format(sock_data))
-                    if (header):
-                        return [], []
-                    else:
-                        return []
-            except OSError:
-                print ("Python Ethernet --> Error accessing socket: No data packet received from board, quitting")
-                print ("Python Ethernet --> Socket was {}".format(sock_data))
-                sock_data.close()
-                if (header):
-                    return [], []
-                else:
-                    return []
+            while not self.stop_event.is_set():
+                resp = self.processing.pfb_output_queue.get(True, timeout)
+                self.processing.pfb_output_queue.task_done()
+                if resp is self.processing.stop_signal:
+                    self.logger.debug(f"get_pfb_data has been told to stop. Exiting...")
+                    break
+                if (not self.processing.pfb_output_queue.empty()):
+                    self.logger.warning(f"PFB queue still has {self.processing.pfb_output_queue.qsize()} items")
+            data = resp['data']
             if (data != None):
                 incoming_packets.append(data)
-        #print (sock_data.getsockname())
-        sock_data.close()
         if (data_type == "adc"):
             formatted_data, header_dict = self.check_data_adc(incoming_packets)
         elif (data_type == "cal"):
@@ -393,7 +399,7 @@ if __name__ == "__main__":
     relative_path = '../config/config_logger.ini'
     config_path = os.path.join(script_dir, relative_path)
     logging.config.fileConfig(config_path)
-
+    print("starting")
     e = LuSEE_ETHERNET()
     e.write_reg(0x121, 0x69)
     resp = e.read_reg(0x121)
