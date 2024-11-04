@@ -206,9 +206,23 @@
 "weight62": "0x80",
 "weight63": "0x80",
 
+"mode0": false,
+"mode1": false,
+"mode2": false,
+"mode3": true,
+
+"calib_single_bin": 12,
+"calib_single_bin_plot": true,
+"calib_single_bin_show": true,
+"calib_single_bin_save": true,
+
+"calib_correlator_plot": true,
+"calib_correlator_show": true,
+"calib_correlator_save": true,
+
 "print_calib": false,
 "calib_fout_plot": true,
-"calib_fout_plot_show": false,
+"calib_fout_plot_show": true,
 "calib_fout_plot_save": true,
 
 "calib_drift_plot": true,
@@ -216,7 +230,7 @@
 "calib_drift_plot_save": true,
 
 "calib_topbottom_plot": true,
-"calib_topbottom_plot_show": false,
+"calib_topbottom_plot_show": true,
 "calib_topbottom_plot_save": true,
 
 "calib_fdsd_plot": true,

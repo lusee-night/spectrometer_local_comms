@@ -173,8 +173,42 @@ class LuSEE_PLOTTING:
             print(f"-----{all_names[num]}-----")
             print(i)
 
+    def plot_single_bin(self, show, save, b):
+        with open(os.path.join(self.directory, f"calib_output1.json"), "r") as jsonfile:
+            calib_data = json.load(jsonfile)
+        data = calib_data["data"]
+        names = [f"Ch0_Real_bin{b}", f"Ch0_Imag_bin{b}", f"Ch1_Real_bin{b}", f"Ch1_Imag_bin{b}", f"Ch2_Real_bin{b}", f"Ch2_Imag_bin{b}", f"Ch3_Real_bin{b}", f"Ch3_Imag_bin{b}"]
+        for i in range(8):
+            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Cycles", yaxis = "Value")
+
+            if (show):
+                plt.show()
+            else:
+                plt.close(fig)
+
+            if (save):
+                fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_{names[i]}.jpg"))
+            self.plot_num += 1
+
+    def plot_cal_correlator(self, show, save):
+        with open(os.path.join(self.directory, f"calib_output2.json"), "r") as jsonfile:
+            calib_data = json.load(jsonfile)
+        data = calib_data["data"]
+        names = [f"Ch0_Real_correlator", f"Ch0_Imag_correlator", f"Ch1_Real_correlator", f"Ch1_Imag_correlator", f"Ch2_Real_correlator", f"Ch2_Imag_correlator", f"Ch3_Real_correlator", f"Ch3_Imag_correlator"]
+        for i in range(16):
+            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Cycles", yaxis = "Value")
+
+            if (show):
+                plt.show()
+            else:
+                plt.close(fig)
+
+            if (save):
+                fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_{names[i]}.jpg"))
+            self.plot_num += 1
+
     def plot_fout(self, show, save):
-        with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
+        with open(os.path.join(self.directory, f"calib_output0.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
         names = ["Fout1_Real", "Fout1_Imag", "Fout2_Real", "Fout2_Imag", "Fout3_Real", "Fout3_Imag", "Fout4_Real", "Fout4_Imag"]

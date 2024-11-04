@@ -325,7 +325,7 @@ class LuSEE_ETHERNET:
                 self.logger.warning(f"Count queue still has {self.processing.count_output_queue.qsize()} items")
             return resp
 
-    def get_pfb_data(self, timeout = 1):
+    def get_pfb_data(self, timeout = 1, clear = False):
         self.logger.debug(f"Waiting for PFB data")
         while not self.stop_event.is_set():
             resp = self.processing.pfb_output_queue.get(True, timeout)
@@ -335,6 +335,11 @@ class LuSEE_ETHERNET:
                 break
             if (not self.processing.pfb_output_queue.empty()):
                 self.logger.warning(f"PFB queue still has {self.processing.pfb_output_queue.qsize()} items")
+                #This happens with the firmware PFB output for some reason
+                if (clear):
+                    self.logger.warning("Will clear queue")
+                    while not self.processing.pfb_output_queue.empty():
+                        self.processing.pfb_output_queue.get()
             return resp
 
     def get_data_packets(self, data_type, num=1, header = False):

@@ -84,15 +84,6 @@ class LuSEE_MEASURE:
         return working_val
 
     def calibrator_test(self):
-        #Overwrite ADC ramp
-        self.comm.connection.write_reg(0x84D, 1)
-        self.comm.connection.write_reg(0x84E, 0x0)
-        self.comm.connection.write_reg(0x851, 2046)
-
-        #Choose frequency bin
-        self.comm.connection.write_reg(0x84F, 102)
-        self.comm.connection.write_reg(0x850, 511)
-        self.comm.connection.write_reg(0x214, 0)
 
         if (self.json_data[f"pretest"]):
             self.spectrometer_simple()
@@ -103,38 +94,91 @@ class LuSEE_MEASURE:
         if (self.json_data["reset_cal"]):
             self.comm.connection.write_reg(self.comm.cal_enable, 0)
             self.comm.connection.write_reg(self.comm.CF_Enable, 0)
-
+        self.logger.info("Setting up calibrator")
         self.setup_calibrator()
-
+        self.logger.info("Set up calibrator")
         with open(self.json_output_file, 'w', encoding='utf-8') as f:
             json.dump(self.datastore, f, ensure_ascii=False, indent=4, default=str)
 
         self.plotter = LuSEE_PLOTTING(self.results_path)
 
         self.comm.readout_mode("sw")
-        all_data,all_headers = self.comm.get_calib_data_sw(
+
+        if (self.json_data["mode0"]):
+            self.logger.info("Doing Calibrator Mode 0")
+            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.comm.connection.write_reg(0x84D, 0)
+            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
+            all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 0,
             header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
             wait_for_confirmation = self.json_data["wait_to_start"]
             )
-        calib_dict = {"header": all_headers,
-                        "data": all_data}
-        with open(os.path.join(self.results_path, f"calib_output.json"), 'w', encoding='utf-8') as f:
-            json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
+            calib_dict = {"header": all_headers,
+                            "data": all_data}
+            with open(os.path.join(self.results_path, f"calib_output0.json"), 'w', encoding='utf-8') as f:
+                json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
+            if (self.json_data[f"calib_fout_plot"]):
+                self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
+            #You get gNacc and gphase also
+        if (self.json_data["mode1"]):
+            self.logger.info("Doing Calibrator Mode 1")
+            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.comm.connection.write_reg(0x84D, 1)
+            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
+            self.comm.connection.write_reg(0x84F, self.json_data["calib_single_bin"])
+            all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 1,
+            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
+            wait_for_confirmation = self.json_data["wait_to_start"]
+            )
+            calib_dict = {"header": all_headers,
+                            "data": all_data}
+            with open(os.path.join(self.results_path, f"calib_output1.json"), 'w', encoding='utf-8') as f:
+                json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
+            if (self.json_data[f"calib_single_bin_plot"]):
+                self.plotter.plot_single_bin(self.json_data[f"calib_single_bin_show"], self.json_data[f"calib_single_bin_save"], self.json_data["calib_single_bin"])
+        if (self.json_data["mode2"]):
+            self.logger.info("Doing Calibrator Mode 2")
+            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.comm.connection.write_reg(0x84D, 2)
+            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
+            all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 2,
+            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
+            wait_for_confirmation = self.json_data["wait_to_start"]
+            )
+            calib_dict = {"header": all_headers,
+                            "data": all_data}
+            with open(os.path.join(self.results_path, f"calib_output2.json"), 'w', encoding='utf-8') as f:
+                json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
+            if (self.json_data[f"calib_correlator_plot"]):
+                self.plotter.plot_cal_correlator(self.json_data[f"calib_correlator_show"], self.json_data[f"calib_correlator_save"])
+        if (self.json_data["mode3"]):
+            self.logger.info("Doing Calibrator Mode 3")
+            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.comm.connection.write_reg(0x84D, 3)
+            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
+            all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 3,
+                header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
+                wait_for_confirmation = self.json_data["wait_to_start"]
+                )
+            calib_dict = {"header": all_headers,
+                            "data": all_data}
+            with open(os.path.join(self.results_path, f"calib_output3.json"), 'w', encoding='utf-8') as f:
+                json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
 
-        if (self.json_data[f"print_calib"]):
-            self.plotter.print_calib()
+            if (self.json_data[f"print_calib"]):
+                self.plotter.print_calib()
 
-        if (self.json_data[f"calib_fout_plot"]):
-            self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
+            if (self.json_data[f"calib_fout_plot"]):
+                self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
 
-        if (self.json_data[f"calib_drift_plot"]):
-            self.plotter.plot_lock_drift(self.json_data[f"calib_drift_plot_show"], self.json_data[f"calib_drift_plot_save"])
+            if (self.json_data[f"calib_drift_plot"]):
+                self.plotter.plot_lock_drift(self.json_data[f"calib_drift_plot_show"], self.json_data[f"calib_drift_plot_save"])
 
-        if (self.json_data[f"calib_topbottom_plot"]):
-            self.plotter.plot_topbottom(self.json_data[f"calib_topbottom_plot_show"], self.json_data[f"calib_topbottom_plot_save"])
+            if (self.json_data[f"calib_topbottom_plot"]):
+                self.plotter.plot_topbottom(self.json_data[f"calib_topbottom_plot_show"], self.json_data[f"calib_topbottom_plot_save"])
 
-        if (self.json_data[f"calib_fdsd_plot"]):
-            self.plotter.plot_fdsd(self.json_data[f"calib_fdsd_plot_show"], self.json_data[f"calib_fdsd_plot_save"])
+            if (self.json_data[f"calib_fdsd_plot"]):
+                self.plotter.plot_fdsd(self.json_data[f"calib_fdsd_plot_show"], self.json_data[f"calib_fdsd_plot_save"])
 
     def spectrometer_simple(self):
         self.setup()
@@ -275,6 +319,7 @@ class LuSEE_MEASURE:
 
         self.comm.reset_all_fifos()
         self.comm.load_fft_fifos()
+        self.comm.connection.write_reg(self.comm.df_enable, 0)
         self.comm.start_spectrometer()
 
         wait_time = self.comm.cycle_time * (2**avgs)
@@ -420,7 +465,6 @@ class LuSEE_MEASURE:
         self.plotter = LuSEE_PLOTTING(self.results_path)
 
         test = self.json_data["test"]
-
         if (test == "spectrometer_simple"):
             self.spectrometer_simple()
         elif (test == "calibrator"):
