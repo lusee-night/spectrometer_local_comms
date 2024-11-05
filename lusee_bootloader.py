@@ -247,14 +247,14 @@ if __name__ == "__main__":
     boot.init_bootloader()
     time.sleep(0.1)
     #boot.remain()
-    boot.get_program_info()
-    boot.load_region(region = 2)
-    boot.get_program_info()
+    #boot.get_program_info()
+    #boot.load_region(region = 2)
+    #boot.get_program_info()
     boot.file_path = sys.argv[1]
-    boot.read_loaded_program()
+    #boot.read_loaded_program()
     #boot.ddr_quick_test()
 
 
     # boot.delete_region(region = 1)
-    # boot.write_hex_bootloader(region = 2)
+    boot.write_hex_bootloader(region = 2)
     boot.launch_software()
