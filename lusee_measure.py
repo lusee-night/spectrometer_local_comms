@@ -106,9 +106,8 @@ class LuSEE_MEASURE:
 
         if (self.json_data["mode0"]):
             self.logger.info("Doing Calibrator Mode 0")
-            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.calibrator_reset()
             self.comm.connection.write_reg(0x84D, 0)
-            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
             all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 0,
             header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
             wait_for_confirmation = self.json_data["wait_to_start"]
@@ -122,9 +121,8 @@ class LuSEE_MEASURE:
             #You get gNacc and gphase also
         if (self.json_data["mode1"]):
             self.logger.info("Doing Calibrator Mode 1")
-            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.calibrator_reset()
             self.comm.connection.write_reg(0x84D, 1)
-            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
             self.comm.connection.write_reg(0x84F, self.json_data["calib_single_bin"])
             all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 1,
             header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
@@ -138,9 +136,8 @@ class LuSEE_MEASURE:
                 self.plotter.plot_single_bin(self.json_data[f"calib_single_bin_show"], self.json_data[f"calib_single_bin_save"], self.json_data["calib_single_bin"])
         if (self.json_data["mode2"]):
             self.logger.info("Doing Calibrator Mode 2")
-            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.calibrator_reset()
             self.comm.connection.write_reg(0x84D, 2)
-            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
             all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 2,
             header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
             wait_for_confirmation = self.json_data["wait_to_start"]
@@ -153,9 +150,8 @@ class LuSEE_MEASURE:
                 self.plotter.plot_cal_correlator(self.json_data[f"calib_correlator_show"], self.json_data[f"calib_correlator_save"])
         if (self.json_data["mode3"]):
             self.logger.info("Doing Calibrator Mode 3")
-            self.comm.connection.write_reg(self.comm.CF_Enable, 2)
+            self.calibrator_reset()
             self.comm.connection.write_reg(0x84D, 3)
-            self.comm.connection.write_reg(self.comm.CF_Enable, 0)
             all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 3,
                 header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
                 wait_for_confirmation = self.json_data["wait_to_start"]
@@ -328,20 +324,7 @@ class LuSEE_MEASURE:
 
     def setup_calibrator(self):
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
-
         self.comm.set_cal_sticky_error(self.json_data["sticky_errors"])
-        for i in range(0x863, 0x883):
-            self.comm.connection.write_reg(i, 0)
-        #Overwrite a stable notch value
-        self.comm.connection.write_reg(0x844, 0)
-        self.comm.connection.write_reg(0x845, 2)
-        self.comm.connection.write_reg(0x846, 3)
-        self.comm.connection.write_reg(0x847, 2)
-        self.comm.connection.write_reg(0x848, 3)
-        self.comm.connection.write_reg(0x849, 2)
-        self.comm.connection.write_reg(0x84A, 3)
-        self.comm.connection.write_reg(0x84B, 2)
-        self.comm.connection.write_reg(0x84C, 3)
 
         base_tone = 50e3
         samples_per_fft = 4096
@@ -428,7 +411,7 @@ class LuSEE_MEASURE:
             fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16)
             )
 
-        for i in range(64):
+        for i in range(410):
             self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
 
     def calibrator_reset(self):

@@ -456,8 +456,16 @@ class LuSEE_COMMS:
         return add_value
 
     def get_adc_data(self):
-        self.connection.request_fw_packet()
-        return self.connection.get_adc_data()
+        tries = 10
+        for i in range(tries):
+            self.connection.request_fw_packet()
+            resp = self.connection.get_adc_data()
+            if (resp):
+                return resp
+            else:
+                self.logger.warning(f"ADC failed for the {i} time. Retrying")
+        self.logger.warning(f"ADC data collection could not get data after {tries} tries")
+        return None
 
     def get_counter_data(self):
         self.connection.request_fw_packet()
@@ -686,6 +694,9 @@ class LuSEE_COMMS:
 
     def get_calib_errors(self):
         for i in range(0x81c, 0x83B+1):
+            self.logger.warning(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
+
+        for i in range(0x9EB, 0x9EE+1):
             self.logger.warning(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
 
     def get_spec_errors(self):

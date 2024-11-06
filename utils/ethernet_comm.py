@@ -4,6 +4,7 @@ import struct
 import socket
 import threading
 import queue
+from queue import Empty
 import select
 import logging
 import logging.config
@@ -249,20 +250,28 @@ class LuSEE_ETHERNET:
         time.sleep(self.cdi_wait_time)
 
     def read_reg(self, reg):
-        read_dict = {"command": "read",
-                      "reg": int(reg)}
-        self.send_queue.put(read_dict)
-        self.logger.debug(f"Reading Register {hex(reg)}")
-        while not self.stop_event.is_set():
-            resp = self.processing.reg_output_queue.get(True, self.read_timeout)
-            self.processing.reg_output_queue.task_done()
-            if resp is self.processing.stop_signal:
-                self.logger.debug(f"read_reg has been told to stop. Exiting...")
-                break
-            self.logger.debug(f"Read back {hex(resp['data'])}")
-            if (not self.processing.reg_output_queue.empty()):
-                self.logger.warning(f"Register queue still has {self.processing.reg_output_queue.qsize()} items")
-            return resp["data"]
+        tries = 10
+        for i in range(tries):
+            read_dict = {"command": "read",
+                        "reg": int(reg)}
+            self.send_queue.put(read_dict)
+            self.logger.debug(f"Reading Register {hex(reg)}")
+            while not self.stop_event.is_set():
+                try:
+                    resp = self.processing.reg_output_queue.get(True, self.read_timeout)
+                except Empty:
+                    self.logger.warning(f"Register queue was empty for the {i} time. Retrying")
+                    break
+                self.processing.reg_output_queue.task_done()
+                if resp is self.processing.stop_signal:
+                    self.logger.debug(f"read_reg has been told to stop. Exiting...")
+                    break
+                self.logger.debug(f"Read back {hex(resp['data'])}")
+                if (not self.processing.reg_output_queue.empty()):
+                    self.logger.warning(f"Register queue still has {self.processing.reg_output_queue.qsize()} items")
+                return resp["data"]
+        self.logger.warning(f"Register tried {tries} times, but could not get a response for the register")
+        return None
 
     def send_bootloader_message(self, message):
         self.write_cdi_reg(self.write_register, message, self.PORT_WREG)
@@ -304,7 +313,11 @@ class LuSEE_ETHERNET:
     def get_adc_data(self, timeout = 1):
         self.logger.debug(f"Waiting for data")
         while not self.stop_event.is_set():
-            resp = self.processing.adc_output_queue.get(True, timeout)
+            try:
+                resp = self.processing.adc_output_queue.get(True, timeout)
+            except Empty:
+                self.logger.warning(f"ADC data never came")
+                return None
             self.processing.adc_output_queue.task_done()
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"get_adc_data has been told to stop. Exiting...")
