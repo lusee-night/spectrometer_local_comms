@@ -453,8 +453,16 @@ class LuSEE_COMMS:
         return add_value
 
     def get_adc_data(self):
-        self.connection.request_fw_packet()
-        return self.connection.get_adc_data()
+        tries = 10
+        for i in range(tries):
+            self.connection.request_fw_packet()
+            resp = self.connection.get_adc_data()
+            if (resp):
+                return resp
+            else:
+                self.logger.warning(f"ADC failed for the {i} time. Retrying")
+        self.logger.warning(f"ADC data collection could not get data after {tries} tries")
+        return None
 
     def get_counter_data(self):
         self.connection.request_fw_packet()
