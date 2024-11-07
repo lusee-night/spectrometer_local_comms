@@ -332,7 +332,10 @@ class LuSEE_ETHERNET:
     def get_adc_data(self, timeout = 10):
         self.logger.debug(f"Waiting for data")
         while not self.stop_event.is_set():
-            resp = self.processing.adc_output_queue.get(True, timeout)
+            try:
+                resp = self.processing.adc_output_queue.get(True, timeout)
+            except Empty:
+                return None
             self.processing.adc_output_queue.task_done()
             if resp is self.processing.stop_signal:
                 self.logger.debug(f"get_adc_data has been told to stop. Exiting...")
