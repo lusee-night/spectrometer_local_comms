@@ -295,11 +295,11 @@ class LuSEE_ETHERNET:
         time.sleep(3)
         self.write_reg(self.spectrometer_reset,0)
         time.sleep(2)
-        self.write_cdi_reg(self.cdi_reset,1)
+        self.write_cdi_reg(self.cdi_reset, 1, self.PORT_WREG)
         time.sleep(2)
-        self.write_cdi_reg(self.cdi_reset,0)
+        self.write_cdi_reg(self.cdi_reset, 0, self.PORT_WREG)
         time.sleep(1)
-        self.write_cdi_reg(self.latch_register, 0)
+        self.write_cdi_reg(self.latch_register, 0, self.PORT_WREG)
         time.sleep(self.wait_time)
 
     def request_fw_packet(self):

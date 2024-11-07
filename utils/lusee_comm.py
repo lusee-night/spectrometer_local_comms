@@ -611,10 +611,10 @@ class LuSEE_COMMS:
         all_data = []
         all_header = []
         #Wait for averaging
-        wait_time = self.cycle_time * (2**self.notch_avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
+        #wait_time = self.cycle_time * (2**self.notch_avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
 
-        if (wait_time > 1.0):
-            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
+        # if (wait_time > 1.0):
+        #     print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
         #time.sleep(wait_time)
         self.get_spec_errors()
         self.get_calib_errors()
@@ -640,7 +640,7 @@ class LuSEE_COMMS:
             dtype = "cal"
             while (not received):
                 apid = 0x210 + i
-                final_header= self.connection.get_pfb_data(timeout = wait_time)
+                final_header= self.connection.get_pfb_data(timeout = 60)
                 header = final_header["header"]
                 data = final_header["data"]
                 data_size = self.connection.read_reg(self.tlm_details) & 0xFFFF
@@ -734,7 +734,7 @@ class LuSEE_COMMS:
 
     def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,
                          driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable,
-                         power_slice, fdsd_slice, fdxsdx_slice):
+                         power_slice, fdsd_slice, fdxsdx_slice, sum0shift, SNRon, SNRoff, Nsettle, delta_drift_cor_A, delta_drift_cor_B, prod_index, prod_index2):
 
         self.connection.write_reg(self.Nac1, Nac1)
         self.connection.write_reg(self.Nac2, Nac2)
@@ -758,6 +758,15 @@ class LuSEE_COMMS:
         self.connection.write_reg(0x83D, power_slice)
         self.connection.write_reg(0x83E, fdsd_slice)
         self.connection.write_reg(0x83F, fdxsdx_slice)
+
+        self.connection.write_reg(0x841, sum0shift)
+        self.connection.write_reg(0x842, SNRon)
+        self.connection.write_reg(0x843, SNRoff)
+        self.connection.write_reg(0x844, Nsettle)
+        self.connection.write_reg(0x845, delta_drift_cor_A)
+        self.connection.write_reg(0x846, delta_drift_cor_B)
+        self.connection.write_reg(0x9F0, prod_index)
+        self.connection.write_reg(0x9F1, prod_index2)
 
     def apply_weight(self, weight, val):
         weight_register = self.weight_base + weight

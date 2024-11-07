@@ -15,6 +15,7 @@ class LuSEE_PROCESS_DATA:
         self.count_output_queue = parent.count_output_queue
         self.adc_output_queue = parent.adc_output_queue
         self.pfb_output_queue = parent.pfb_output_queue
+        self.calib_output_queue = parent.calib_output_queue
 
         self.count_num = None
         self.bytes_per_packet = 0x7F8
@@ -24,6 +25,8 @@ class LuSEE_PROCESS_DATA:
         self.adc_apids = ["0x220", "0x221", "0x222", "0x223", "0x2f0", "0x2f1", "0x2f2", "0x2f3"]
         self.fft_pkt_num = 3
         self.fft_apids = ["0x210", "0x211", "0x212", "0x213", "0x214", "0x215", "0x216", "0x217", "0x218", "0x219", "0x21a", "0x21b", "0x21c", "0x21d", "0x21e", "0x21f", "0x2e0", "0x2e1", "0x2e2", "0x2e3"]
+        self.calib_pkt_num = 2
+        self.calib_apids = ['0x230', '0x231', '0x232', '0x233', '0x234', '0x235', '0x236', '0x237', '0x238', '0x239', '0x23a', '0x23b', '0x23v', '0x23d', '0x23e', '0x23f', '0x240', '0x241', '0x242', '0x243']
 
     def process_data(self):
         name = threading.current_thread().name
@@ -48,6 +51,7 @@ class LuSEE_PROCESS_DATA:
                 running_process["header"][current_type[1]] = header
                 current_type[1] += 1
                 self.logger.info(f"This is packet #{current_type[1]} in an FFT sequence")
+                self.logger.info(formatted_data)
                 if (current_type[1] < self.fft_pkt_num):
                     #The rest of the raw data is after the 13 * 2 byte header
                     if ("raw_data" in running_process):
@@ -58,7 +62,7 @@ class LuSEE_PROCESS_DATA:
                 elif (current_type[1] == self.fft_pkt_num):
                     self.logger.info("Final packet for FFT")
                     running_process["raw_data"] += (data[26:])
-
+                    self.logger.info(running_process)
                     #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
                     formatted_data2 = struct.unpack_from(">2048I",running_process["raw_data"])
                     #But each 2 byte section of the 4 byte value is reversed
@@ -132,7 +136,40 @@ class LuSEE_PROCESS_DATA:
                     self.logger.warning(f"Was reading Count and packet number is {current_type[1]}")
                     current_type = [None, 0]
                     running_process = {"header" : {}}
+            elif ((header["ccsds_appid"] in self.calib_apids) and ((current_type[0] == None) or (current_type[0] == "Calib"))):
+                running_process["header"][current_type[1]] = header
+                current_type[1] += 1
+                self.logger.info(f"This is packet #{current_type[1]} in a calibrator sequence")
+                self.logger.error(f"Total header is {header}")
+                #self.logger.info(formatted_data)
+                if (current_type[1] < self.calib_pkt_num):
+                    #The rest of the raw data is after the 13 * 2 byte header
+                    if ("raw_data" in running_process):
+                        running_process["raw_data"] += (data[26:])
+                    else:
+                        running_process["raw_data"] = data[26:]
+                    current_type[0] = "Calib"
+                elif (current_type[1] == self.calib_pkt_num):
+                    self.logger.info("Final packet for Calib")
+                    running_process["raw_data"] += (data[26:])
+                    #After the payload part of all the incoming packets has been concatenated, we know it's exactly 2048 bins and can unpack it appropriately
+                    formatted_data2 = struct.unpack_from(">1024I",running_process["raw_data"])
+                    #But each 2 byte section of the 4 byte value is reversed
+                    formatted_data3 = [(j >> 16) + ((j & 0xFFFF) << 16) for j in formatted_data2]
+                    final_header = {"header" : running_process["header"],
+                                    "data" : formatted_data3
+                                    }
+                    self.logger.debug(f"Putting {final_header} into queue")
+                    self.calib_output_queue.put(final_header)
+                    current_type = [None, 0]
+                    running_process = {"header" : {}}
+                else:
+                    self.logger.warning(f"Was reading Calib and packet number is {current_type[1]}")
+                    current_type = [None, 0]
+                    running_process = {"header" : {}}
+
             else:
                 self.logger.error(f"APID is {header['ccsds_appid']}, running type is {current_type}")
+                #self.logger.error(f"Total header is {header}")
 
         self.logger.info(f"{name} exited")

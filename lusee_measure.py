@@ -408,11 +408,19 @@ class LuSEE_MEASURE:
             antenna_enable = int(self.json_data["antenna_enable"], 16),
             power_slice = int(self.json_data["power_slice"], 16),
             fdsd_slice = int(self.json_data["fdsd_slice"], 16),
-            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16)
+            fdxsdx_slice = int(self.json_data["fdxsdx_slice"], 16),
+            sum0shift = self.json_data["sum0shift"],
+            SNRon = self.json_data["SNRon"],
+            SNRoff = self.json_data["SNRoff"],
+            Nsettle = self.json_data["Nsettle"],
+            delta_drift_cor_A = int(self.json_data["delta_drift_cor_A"], 16),
+            delta_drift_cor_B = int(self.json_data["delta_drift_cor_B"], 16),
+            prod_index = self.json_data["prod_index"],
+            prod_index2 = self.json_data["prod_index2"]
             )
 
-        for i in range(410):
-            self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
+        # for i in range(410):
+        #     self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
 
     def calibrator_reset(self):
         self.comm.reset_calibrator_formatter()

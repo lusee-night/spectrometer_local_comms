@@ -35,6 +35,7 @@ class LuSEE_PROCESSING:
             self.adc_output_queue = queue.Queue()
             self.pfb_output_queue = queue.Queue()
             self.hk_output_queue = queue.Queue()
+            self.calib_output_queue = queue.Queue()
 
             self.reg = LuSEE_PROCESS_REG(self)
             self.data = LuSEE_PROCESS_DATA(self)
