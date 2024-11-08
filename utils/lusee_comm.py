@@ -640,7 +640,8 @@ class LuSEE_COMMS:
             dtype = "cal"
             while (not received):
                 apid = 0x210 + i
-                final_header= self.connection.get_pfb_data(timeout = 60)
+                final_header= self.connection.get_calib_data(timeout = 60)
+                self.logger.info(f"Received {i}")
                 header = final_header["header"]
                 data = final_header["data"]
                 data_size = self.connection.read_reg(self.tlm_details) & 0xFFFF
@@ -650,8 +651,8 @@ class LuSEE_COMMS:
                     self.connection.write_reg(self.scratchpad_1, 0x10 + (apid & 0xF))
                     received = False
                     errors += 1
-                    print(f"Header is empty")
-                    print(f"Retrying channel {i}")
+                    self.logger.warning(f"Header is empty")
+                    self.logger.warning(f"Retrying channel {i}")
                 else:
                     #Data usually comes in 3 packets and has 3 separate headers
                     for pkt in range(num_packets):
@@ -663,22 +664,22 @@ class LuSEE_COMMS:
                                 self.connection.write_reg(self.scratchpad_1, 0x30 + (apid & 0xF))
                                 received = False
                                 errors += 1
-                                print("ccsds_appid not in the header dictionary")
-                                print(f"Retrying channel {i}")
+                                self.logger.warning("ccsds_appid not in the header dictionary")
+                                self.logger.warning(f"Retrying channel {i}")
                                 break
                         else:
                             self.connection.write_reg(self.scratchpad_1, 0x40 + (apid & 0xF))
                             received = False
                             errors += 1
-                            print(f"Header doesn't have key {pkt}")
-                            print(f"Retrying channel {i}")
+                            self.logger.warning(f"Header doesn't have key {pkt}")
+                            self.logger.warning(f"Retrying channel {i}")
                             break
                 if (errors > 10):
-                    print("That's 10 errors in a row in lusee_comm, exiting")
+                    self.logger.error("That's 10 errors in a row in lusee_comm, exiting")
                     return all_data
                 #Clear the acknowledge flag to tell microcontroller to check our response
                 self.connection.write_reg(self.client_ack, 0)
-                self.logger.info(f"Recieved proper packet of {int(header[pkt]['ccsds_appid'], 16)}")
+                self.logger.info(f"Recieved proper packet of {hex(int(header[pkt]['ccsds_appid'], 16))}")
             all_data.append(data)
             all_header.append(header)
         self.connection.write_reg(self.CF_Enable, 0)

@@ -3,7 +3,7 @@
 "test": "calibrator",
 "output_directory": "calibrator",
 "title": "Testing",
-"comment": "Updated VHDL with resize - Vulcan is 1 5500000 0",
+"comment": "New calibrator firmware - Vulcan is 1 0 0",
 "relative": true,
 
 "reset": false,
@@ -22,7 +22,7 @@
 "mux4_in2": 4,
 "mux4_gain": 0,
 
-"pretest": false,
+"pretest": true,
 
 "adc1_save_data": true,
 "adc1_plot": true,
@@ -151,8 +151,8 @@
 "prod_index2": 24,
 
 "mode0": false,
-"mode1": false,
-"mode2": false,
+"mode1": true,
+"mode2": true,
 "mode3": true,
 
 "calib_single_bin": 12,

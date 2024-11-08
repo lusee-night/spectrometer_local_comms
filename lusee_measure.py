@@ -164,9 +164,6 @@ class LuSEE_MEASURE:
             if (self.json_data[f"print_calib"]):
                 self.plotter.print_calib()
 
-            if (self.json_data[f"calib_fout_plot"]):
-                self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
-
             if (self.json_data[f"calib_drift_plot"]):
                 self.plotter.plot_lock_drift(self.json_data[f"calib_drift_plot_show"], self.json_data[f"calib_drift_plot_save"])
 

@@ -355,6 +355,23 @@ class LuSEE_ETHERNET:
                         self.processing.pfb_output_queue.get()
             return resp
 
+    def get_calib_data(self, timeout = 10, clear = False):
+        self.logger.debug(f"Waiting for Calibration data")
+        while not self.stop_event.is_set():
+            resp = self.processing.calib_output_queue.get(True, timeout)
+            self.processing.calib_output_queue.task_done()
+            if resp is self.processing.stop_signal:
+                self.logger.debug(f"get_calib_data has been told to stop. Exiting...")
+                break
+            if (not self.processing.calib_output_queue.empty()):
+                self.logger.warning(f"Calib queue still has {self.processing.calib_output_queue.qsize()} items")
+                #This happens with the firmware PFB output for some reason
+                if (clear):
+                    self.logger.warning("Will clear queue")
+                    while not self.processing.calib_output_queue.empty():
+                        self.processing.calib_output_queue.get()
+            return resp
+
     def get_data_packets(self, data_type, num=1, header = False):
         if ((data_type != "adc") and (data_type != "fft") and (data_type != "sw") and (data_type != "cal")):
             print(f"Python Ethernet --> Error in 'get_data_packets': Must request 'adc' or 'fft' or 'sw' as 'data_type'. You requested {data_type}")
