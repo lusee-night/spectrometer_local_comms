@@ -460,8 +460,8 @@ class LuSEE_COMMS:
             if (resp):
                 return resp
             else:
-                self.logger.warning(f"ADC failed for the {i} time. Retrying")
-        self.logger.warning(f"ADC data collection could not get data after {tries} tries")
+                print(f"ADC failed for the {i} time. Retrying")
+        print(f"ADC data collection could not get data after {tries} tries")
         return None
 
     def get_counter_data(self):
@@ -472,7 +472,7 @@ class LuSEE_COMMS:
         self.connection.request_fw_packet()
         wait_time = self.cycle_time * (2**self.avg) * 1.2
         if (wait_time > 1.0):
-            self.logger.info(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+            print(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         else:
             wait_time = 1
         return self.connection.get_pfb_data()
