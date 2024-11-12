@@ -473,7 +473,7 @@ class LuSEE_COMMS:
 
     def get_pfb_data(self):
         self.connection.request_fw_packet()
-        wait_time = self.cycle_time * (2**self.avg) * 1.2
+        wait_time = self.cycle_time * (2**self.avg) * 1.5
         if (wait_time > 1.0):
             self.logger.info(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
         else:
@@ -640,7 +640,7 @@ class LuSEE_COMMS:
             dtype = "cal"
             while (not received):
                 apid = 0x210 + i
-                final_header= self.connection.get_calib_data(timeout = 60)
+                final_header= self.connection.get_calib_data(timeout = 120)
                 self.logger.info(f"Received {i}")
                 header = final_header["header"]
                 data = final_header["data"]

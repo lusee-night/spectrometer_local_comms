@@ -104,21 +104,7 @@ class LuSEE_MEASURE:
 
         self.comm.readout_mode("sw")
 
-        if (self.json_data["mode0"]):
-            self.logger.info("Doing Calibrator Mode 0")
-            self.calibrator_reset()
-            self.comm.connection.write_reg(0x84D, 0)
-            all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 0,
-            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
-            wait_for_confirmation = self.json_data["wait_to_start"]
-            )
-            calib_dict = {"header": all_headers,
-                            "data": all_data}
-            with open(os.path.join(self.results_path, f"calib_output0.json"), 'w', encoding='utf-8') as f:
-                json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
-            if (self.json_data[f"calib_fout_plot"]):
-                self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
-            #You get gNacc and gphase also
+
         if (self.json_data["mode1"]):
             self.logger.info("Doing Calibrator Mode 1")
             self.calibrator_reset()
@@ -172,6 +158,21 @@ class LuSEE_MEASURE:
 
             if (self.json_data[f"calib_fdsd_plot"]):
                 self.plotter.plot_fdsd(self.json_data[f"calib_fdsd_plot_show"], self.json_data[f"calib_fdsd_plot_save"])
+        if (self.json_data["mode0"]):
+            self.logger.info("Doing Calibrator Mode 0")
+            self.calibrator_reset()
+            self.comm.connection.write_reg(0x84D, 0)
+            all_data,all_headers = self.comm.get_calib_data_sw(calib_mode = 0,
+            header_return = True, notch_avg = self.json_data["notch_averages"], Nac1 = self.json_data["Nac1"], Nac2 = self.json_data["Nac2"], test = False,
+            wait_for_confirmation = self.json_data["wait_to_start"]
+            )
+            calib_dict = {"header": all_headers,
+                            "data": all_data}
+            with open(os.path.join(self.results_path, f"calib_output0.json"), 'w', encoding='utf-8') as f:
+                json.dump(calib_dict, f, ensure_ascii=False, indent=4, default=str)
+            if (self.json_data[f"calib_fout_plot"]):
+                self.plotter.plot_fout(self.json_data[f"calib_fout_plot_show"], self.json_data[f"calib_fout_plot_save"])
+            #You get gNacc and gphase also
 
     def spectrometer_simple(self):
         self.setup()
@@ -315,9 +316,9 @@ class LuSEE_MEASURE:
         self.comm.connection.write_reg(self.comm.df_enable, 0)
         self.comm.start_spectrometer()
 
-        wait_time = self.comm.cycle_time * (2**avgs)
-        if (wait_time > 1.0):
-            self.logger.info(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
+        # wait_time = self.comm.cycle_time * (2**avgs)
+        # if (wait_time > 1.0):
+        #     self.logger.info(f"Waiting {wait_time} seconds for PFB data because average setting is {avgs} for {2**avgs} averages")
 
     def setup_calibrator(self):
         self.comm.connection.write_reg(0x840, self.json_data["hold_drift"])
@@ -416,8 +417,8 @@ class LuSEE_MEASURE:
             prod_index2 = self.json_data["prod_index2"]
             )
 
-        # for i in range(410):
-        #     self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
+        for i in range(410):
+            self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
 
     def calibrator_reset(self):
         self.comm.reset_calibrator_formatter()
