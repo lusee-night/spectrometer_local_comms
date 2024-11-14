@@ -417,8 +417,8 @@ class LuSEE_MEASURE:
             prod_index2 = self.json_data["prod_index2"]
             )
 
-        for i in range(410):
-            self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
+        # for i in range(410):
+        #     self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
 
     def calibrator_reset(self):
         self.comm.reset_calibrator_formatter()

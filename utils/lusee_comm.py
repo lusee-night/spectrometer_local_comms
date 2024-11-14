@@ -3,7 +3,7 @@ import logging
 import logging.config
 from datetime import datetime
 from utils import LuSEE_ETHERNET
-
+import copy
 class LuSEE_COMMS:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -611,22 +611,22 @@ class LuSEE_COMMS:
         all_data = []
         all_header = []
         #Wait for averaging
-        #wait_time = self.cycle_time * (2**self.notch_avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
+        wait_time = self.cycle_time * (2**self.notch_avg) * (32 * (1+self.Nac1_val)) * (2**self.Nac2_val) * 1.4
 
-        # if (wait_time > 1.0):
-        #     print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
+        if (wait_time > 1.0):
+            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
         #time.sleep(wait_time)
         self.get_spec_errors()
         self.get_calib_errors()
 
         if (calib_mode == 0):
-            packets = 11
+            packets = 10
         elif (calib_mode == 1):
             packets = 8
         elif (calib_mode == 2):
             packets = 16
         elif (calib_mode == 3):
-            packets = 20
+            packets = 24
         else:
             self.logger.error(f"Calibration mode was given to function as {calib_mode}")
 
@@ -638,55 +638,22 @@ class LuSEE_COMMS:
             received = False
             errors = 0
             dtype = "cal"
-            while (not received):
-                apid = 0x210 + i
-                final_header= self.connection.get_calib_data(timeout = 120)
-                self.logger.info(f"Received {i}")
-                header = final_header["header"]
-                data = final_header["data"]
-                data_size = self.connection.read_reg(self.tlm_details) & 0xFFFF
-                num_packets = (data_size // (1024 - 13)) + 1
-                self.logger.info(f"data_size is {data_size}, num_packets is {num_packets}")
-                if header == []:
-                    self.connection.write_reg(self.scratchpad_1, 0x10 + (apid & 0xF))
-                    received = False
-                    errors += 1
-                    self.logger.warning(f"Header is empty")
-                    self.logger.warning(f"Retrying channel {i}")
-                else:
-                    #Data usually comes in 3 packets and has 3 separate headers
-                    for pkt in range(num_packets):
-                        if pkt in header:
-                            if 'ccsds_appid' in header[pkt]:
-                                self.connection.write_reg(self.scratchpad_1, (apid & 0xF))
-                                received = True
-                            else:
-                                self.connection.write_reg(self.scratchpad_1, 0x30 + (apid & 0xF))
-                                received = False
-                                errors += 1
-                                self.logger.warning("ccsds_appid not in the header dictionary")
-                                self.logger.warning(f"Retrying channel {i}")
-                                break
-                        else:
-                            self.connection.write_reg(self.scratchpad_1, 0x40 + (apid & 0xF))
-                            received = False
-                            errors += 1
-                            self.logger.warning(f"Header doesn't have key {pkt}")
-                            self.logger.warning(f"Retrying channel {i}")
-                            break
-                if (errors > 10):
-                    self.logger.error("That's 10 errors in a row in lusee_comm, exiting")
-                    return all_data
-                #Clear the acknowledge flag to tell microcontroller to check our response
-                self.connection.write_reg(self.client_ack, 0)
-                self.logger.info(f"Recieved proper packet of {hex(int(header[pkt]['ccsds_appid'], 16))}")
-            all_data.append(data)
-            all_header.append(header)
+            #while (not received):
+            apid = 0x210 + i
+            final_header = self.connection.get_calib_data(timeout = wait_time)
+            self.logger.info(f"Received {i}")
+            header = final_header["header"]
+            data = final_header["data"]
+            self.logger.info(f"Recieved proper packet of {hex(int(header[0]['ccsds_appid'], 16))}")
+            all_data.append(copy.deepcopy(data))
+            all_header.append(copy.deepcopy(header))
         self.connection.write_reg(self.CF_Enable, 0)
         if (header_return):
             d = {}
             d['debug_fifo_used'] = self.connection.read_reg(self.debug_fifo_used)
             for i in range(0x81c, 0x83B+1):
+                d[f"Register {hex(i)}"] = hex(self.connection.read_reg(i))
+            for i in range(0x9EB, 0x9EE+1):
                 d[f"Register {hex(i)}"] = hex(self.connection.read_reg(i))
             all_header.append(d)
             return all_data, all_header

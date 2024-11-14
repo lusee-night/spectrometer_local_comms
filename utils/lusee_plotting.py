@@ -213,7 +213,7 @@ class LuSEE_PLOTTING:
         data = calib_data["data"]
         names = ["Fout1_Real", "Fout1_Imag", "Fout2_Real", "Fout2_Imag", "Fout3_Real", "Fout3_Imag", "Fout4_Real", "Fout4_Imag"]
         for i in range(8):
-            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Cycles", yaxis = "Value")
+            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Calibration Bin", yaxis = "Value")
 
             if (show):
                 plt.show()
@@ -305,7 +305,8 @@ class LuSEE_PLOTTING:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
         lock_data = data[0]
-        fig = self.plot_lock_power(lock_data)
+        snr_data = [data[20], data[21], data[22], data[23]]
+        fig = self.plot_lock_power(lock_data, snr_data)
         if (show):
             plt.show()
         else:
@@ -326,12 +327,12 @@ class LuSEE_PLOTTING:
             fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_drift.jpg"))
         self.plot_num += 1
 
-    def plot_lock_power(self, data):
+    def plot_lock_power(self, data, snr_data):
         lock = [i&0x1 for i in data]
-        pwr1 = [(i&0x2) >> 1 for i in data]
-        pwr2 = [(i&0x4) >> 2 for i in data]
-        pwr3 = [(i&0x8) >> 3 for i in data]
-        pwr4 = [(i&0x10) >> 4 for i in data]
+        pwr1 = [(i&0x10000) >> 16 for i in data]
+        pwr2 = [(i&0x20000) >> 17 for i in data]
+        pwr3 = [(i&0x40000) >> 18 for i in data]
+        pwr4 = [(i&0x80000) >> 19 for i in data]
 
         fig, (lock_ax, pwr1_ax, pwr2_ax, pwr3_ax, pwr4_ax) = plt.subplots(nrows=5, ncols=1, sharex=True, figsize=(32, 24))
         axs = [lock_ax, pwr1_ax, pwr2_ax, pwr3_ax, pwr4_ax]
@@ -341,11 +342,15 @@ class LuSEE_PLOTTING:
         plt.subplots_adjust(wspace=0, hspace=0, top = 0.90, bottom = 0.1, right = 0.92, left = 0.09)
         fig.suptitle(f"Process Parameters", fontsize = self.title_size)
 
-        for ax, name, dat in zip(axs, names, datas):
+        for num, (ax, name, dat) in enumerate(zip(axs, names, datas)):
             ax.plot(dat)
             ax.set_yticks([0, 1], labels = name)
             ax.set_ylim([-0.5, 1.5])
             ax.tick_params(axis='y', labelsize=self.tick_size)
+            if (num > 0):
+                ax2 = ax.twinx()
+                ax2.plot(snr_data[num-1], color = 'red')
+                ax2.set_ylabel("SNR", fontsize = self.label_size)
         ax.set_xlabel("Cycle", fontsize=self.label_size)
         ax.tick_params(axis='x', labelsize=self.tick_size)
 

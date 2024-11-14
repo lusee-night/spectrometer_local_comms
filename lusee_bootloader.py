@@ -265,7 +265,7 @@ if __name__ == "__main__":
     config_path = os.path.join(script_dir, relative_path)
     logging.config.fileConfig(config_path)
 
-
+    input("About to delete, ok?")
     #arg = sys.argv[1]
     boot = LuSEE_BOOTLOADER()
     boot.init_bootloader()
