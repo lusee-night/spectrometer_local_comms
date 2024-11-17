@@ -416,9 +416,13 @@ class LuSEE_MEASURE:
             prod_index = self.json_data["prod_index"],
             prod_index2 = self.json_data["prod_index2"]
             )
-
-        # for i in range(410):
-        #     self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
+        #This takes time, so if you're keeping it in the same configuration as last time without a reset, maybe you want to skip it
+        if (self.json_data[f"apply_weights"]):
+            self.logger.info("Applying weights")
+            for i in range(410):
+                self.comm.apply_weight(i, int(self.json_data[f"weight{i}"], 16))
+        else:
+            self.logger.info("Not applying weights")
 
     def calibrator_reset(self):
         self.comm.reset_calibrator_formatter()

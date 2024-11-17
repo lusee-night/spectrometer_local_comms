@@ -3,7 +3,7 @@
 "test": "calibrator",
 "output_directory": "calibrator",
 "title": "Testing",
-"comment": "New calibrator firmware - Vulcan is 1 0 0",
+"comment": "New calibrator firmware - Vulcan is 1 5272000 0",
 "relative": true,
 
 "reset": false,
@@ -142,13 +142,13 @@
 "hold_drift": false,
 
 "sum0shift": 0,
-"SNRon": 3,
-"SNRoff": 2,
+"SNRon": 300000,
+"SNRoff": 180000,
 "Nsettle": 3,
 "delta_drift_cor_A": "0x0002",
 "delta_drift_cor_B": "0x00014",
-"prod_index": 0,
-"prod_index2": 0,
+"prod_index": 32,
+"prod_index2": 32,
 
 "mode0": true,
 "mode1": false,
@@ -181,6 +181,7 @@
 "calib_fdsd_plot_show": true,
 "calib_fdsd_plot_save": true,
 
+"apply_weights": false,
 "weight0": "0x03",
 "weight1": "0x03",
 "weight2": "0x03",
