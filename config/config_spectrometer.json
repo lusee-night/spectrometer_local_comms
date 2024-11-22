@@ -1,9 +1,9 @@
 {
 "schema": 1,
 "test": "spectrometer_simple",
-"output_directory": "ssl_testing",
-"title": "SSL Engineering Model",
-"comment": "Testing the 1st and 2nd articles at SSL",
+"output_directory": "bnl_new_cal",
+"title": "Red Board with Calibrator",
+"comment": "Testing the hopefully final version of the calibrator firmware on a red board at BNL at my desk",
 "relative": true,
 
 "reset": false,
@@ -11,16 +11,16 @@
 
 "mux1_in1": 0,
 "mux1_in2": 4,
-"mux1_gain": 0,
+"mux1_gain": 1,
 "mux2_in1": 1,
 "mux2_in2": 4,
-"mux2_gain": 2,
+"mux2_gain": 1,
 "mux3_in1": 2,
 "mux3_in2": 4,
 "mux3_gain": 1,
 "mux4_in1": 3,
 "mux4_in2": 4,
-"mux4_gain": 2,
+"mux4_gain": 1,
 
 "adc1_save_data": true,
 "adc1_plot": true,

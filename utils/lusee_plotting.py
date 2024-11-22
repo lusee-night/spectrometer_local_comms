@@ -160,7 +160,7 @@ class LuSEE_PLOTTING:
         return fig
 
     def print_calib(self):
-        with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
+        with open(os.path.join(self.directory, f"calib_output3.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
 
@@ -168,18 +168,52 @@ class LuSEE_PLOTTING:
         for i in data:
             formatted_data.append([hex(j) for j in i])
 
-        all_names = ["Fout1_Real", "Fout1_Imag", "Fout2_Real", "Fout2_Imag", "Fout3_Real", "Fout3_Imag", "Fout4_Real", "Fout4_Imag", "Lock", "Drift", "Top1", "Top2", "Top3", "Top4", "Bot1", "Bot2", "Bot3", "Bot4", "FD1", "FD2", "FD3", "FD4", "SD1", "SD2", "SD3", "SD4", "FDX", "SDX"]
+        all_names = ["Lock", "Drift", "Top1", "Top2", "Top3", "Top4", "Bot1", "Bot2", "Bot3", "Bot4", "FD1", "FD2", "FD3", "FD4", "SD1", "SD2", "SD3", "SD4", "FDX", "SDX"]
         for num,i in enumerate(formatted_data):
             print(f"-----{all_names[num]}-----")
             print(i)
 
+    def plot_single_bin(self, show, save, b):
+        with open(os.path.join(self.directory, f"calib_output1.json"), "r") as jsonfile:
+            calib_data = json.load(jsonfile)
+        data = calib_data["data"]
+        names = [f"Ch0_Real_bin{b}", f"Ch0_Imag_bin{b}", f"Ch1_Real_bin{b}", f"Ch1_Imag_bin{b}", f"Ch2_Real_bin{b}", f"Ch2_Imag_bin{b}", f"Ch3_Real_bin{b}", f"Ch3_Imag_bin{b}"]
+        for i in range(8):
+            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Cycles", yaxis = "Value")
+
+            if (show):
+                plt.show()
+            else:
+                plt.close(fig)
+
+            if (save):
+                fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_{names[i]}.jpg"))
+            self.plot_num += 1
+
+    def plot_cal_correlator(self, show, save):
+        with open(os.path.join(self.directory, f"calib_output2.json"), "r") as jsonfile:
+            calib_data = json.load(jsonfile)
+        data = calib_data["data"]
+        names = [f"A1_notch_correlator", f"A2_notch_correlator", f"A3_notch_correlator", f"A4_notch_correlator", f"X12R_notch_correlator", f"X12I_notch_correlator", f"X13R_notch_correlator", f"X13I_notch_correlator", f"X14R_notch_correlator", f"X14I_notch_correlator", f"X23R_notch_correlator", f"X23I_notch_correlator", f"X24R_notch_correlator", f"X24I_notch_correlator", f"X34R_notch_correlator", f"X34I_notch_correlator"]
+        for i in range(16):
+            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Cycles", yaxis = "Value")
+
+            if (show):
+                plt.show()
+            else:
+                plt.close(fig)
+
+            if (save):
+                fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_{names[i]}.jpg"))
+            self.plot_num += 1
+
     def plot_fout(self, show, save):
-        with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
+        with open(os.path.join(self.directory, f"calib_output0.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
         names = ["Fout1_Real", "Fout1_Imag", "Fout2_Real", "Fout2_Imag", "Fout3_Real", "Fout3_Imag", "Fout4_Real", "Fout4_Imag"]
         for i in range(8):
-            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Cycles", yaxis = "Value")
+            fig = self.plot(self.twos_comp(data[i], 32), f"{names[i]}", xaxis = "Calibration Bin", yaxis = "Value")
 
             if (show):
                 plt.show()
@@ -267,11 +301,12 @@ class LuSEE_PLOTTING:
         return fig
 
     def plot_lock_drift(self, show, save):
-        with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
+        with open(os.path.join(self.directory, f"calib_output3.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
-        lock_data = data[8]
-        fig = self.plot_lock_power(lock_data)
+        lock_data = data[0]
+        snr_data = [data[20], data[21], data[22], data[23]]
+        fig = self.plot_lock_power(lock_data, snr_data)
         if (show):
             plt.show()
         else:
@@ -281,7 +316,7 @@ class LuSEE_PLOTTING:
             fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_lock.jpg"))
         self.plot_num += 1
 
-        drift_data = self.from_radian(data[9])
+        drift_data = self.from_radian(data[1])
         fig = self.plot_drift(lock_data, drift_data)
         if (show):
             plt.show()
@@ -292,12 +327,12 @@ class LuSEE_PLOTTING:
             fig.savefig (os.path.join(self.directory, f"plot{self.plot_num}_drift.jpg"))
         self.plot_num += 1
 
-    def plot_lock_power(self, data):
+    def plot_lock_power(self, data, snr_data):
         lock = [i&0x1 for i in data]
-        pwr1 = [(i&0x2) >> 1 for i in data]
-        pwr2 = [(i&0x4) >> 2 for i in data]
-        pwr3 = [(i&0x8) >> 3 for i in data]
-        pwr4 = [(i&0x10) >> 4 for i in data]
+        pwr1 = [(i&0x10000) >> 16 for i in data]
+        pwr2 = [(i&0x20000) >> 17 for i in data]
+        pwr3 = [(i&0x40000) >> 18 for i in data]
+        pwr4 = [(i&0x80000) >> 19 for i in data]
 
         fig, (lock_ax, pwr1_ax, pwr2_ax, pwr3_ax, pwr4_ax) = plt.subplots(nrows=5, ncols=1, sharex=True, figsize=(32, 24))
         axs = [lock_ax, pwr1_ax, pwr2_ax, pwr3_ax, pwr4_ax]
@@ -307,11 +342,15 @@ class LuSEE_PLOTTING:
         plt.subplots_adjust(wspace=0, hspace=0, top = 0.90, bottom = 0.1, right = 0.92, left = 0.09)
         fig.suptitle(f"Process Parameters", fontsize = self.title_size)
 
-        for ax, name, dat in zip(axs, names, datas):
+        for num, (ax, name, dat) in enumerate(zip(axs, names, datas)):
             ax.plot(dat)
             ax.set_yticks([0, 1], labels = name)
             ax.set_ylim([-0.5, 1.5])
             ax.tick_params(axis='y', labelsize=self.tick_size)
+            if (num > 0):
+                ax2 = ax.twinx()
+                ax2.plot(snr_data[num-1], color = 'red')
+                ax2.set_ylabel("SNR", fontsize = self.label_size)
         ax.set_xlabel("Cycle", fontsize=self.label_size)
         ax.tick_params(axis='x', labelsize=self.tick_size)
 
@@ -353,12 +392,12 @@ class LuSEE_PLOTTING:
         return fig
 
     def plot_topbottom(self, show, save):
-        with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
+        with open(os.path.join(self.directory, f"calib_output3.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
         names = ["Top1", "Top2", "Top3", "Top4", "Bot1", "Bot2", "Bot3", "Bot4"]
         converted_data = []
-        for num, i in enumerate(range(10, 18)):
+        for num, i in enumerate(range(2, 10)):
             fig = self.plot(self.twos_comp(data[i], 32), f"{names[num]}", xaxis = "Cycles", yaxis = "Value")
             converted_data.append(self.twos_comp(data[i], 32))
             if (show):
@@ -380,12 +419,12 @@ class LuSEE_PLOTTING:
         self.plot_num += 1
 
     def plot_fdsd(self, show, save):
-        with open(os.path.join(self.directory, f"calib_output.json"), "r") as jsonfile:
+        with open(os.path.join(self.directory, f"calib_output3.json"), "r") as jsonfile:
             calib_data = json.load(jsonfile)
         data = calib_data["data"]
         names = ["FD1", "FD2", "FD3", "FD4", "SD1", "SD2", "SD3", "SD4", "FDX", "SDX"]
         converted_data = []
-        for num, i in enumerate(range(18, 28)):
+        for num, i in enumerate(range(10, 20)):
             fig = self.plot(self.twos_comp(data[i], 32), f"{names[num]}", xaxis = "Cycles", yaxis = "Value")
             converted_data.append(self.twos_comp(data[i], 32))
             if (show):

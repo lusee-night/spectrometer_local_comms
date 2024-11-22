@@ -3,6 +3,9 @@ import datetime
 import sys
 import pandas as pd
 import json
+import os
+import logging
+import logging.config
 
 from utils import LuSEE_HK
 from utils import LuSEE_HK_EMULATOR
@@ -11,7 +14,8 @@ from lusee_measure import LuSEE_MEASURE
 
 class LuSEE_POWER:
     def __init__(self, emulator):
-        self.version = 1.01
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.debug("Class created")
         if (emulator):
             self.hk = LuSEE_HK_EMULATOR()
         else:
@@ -152,6 +156,10 @@ class LuSEE_POWER:
         self.test_info = {}
         self.settings_info = {}
 
+    def stop(self):
+        self.measure.stop()
+        self.comm.stop()
+
     def sequence(self, config_file):
         with open(config_file, "r") as jsonfile:
             self.json_data = json.load(jsonfile)
@@ -180,7 +188,7 @@ class LuSEE_POWER:
         adc_stats = {"HIGH_THRESHOLD": high,
                     "LOW_THRESHOLD": low}
         stats = self.comm.get_adc_stats(num = num, high = high, low = low)
-        print(stats)
+        self.logger.info(stats)
         adc_stats.update(stats)
 
         self.settings_info['Register 0x100'] = hex(comm.connection.read_reg(comm.uC_reset))
@@ -211,18 +219,18 @@ class LuSEE_POWER:
         self.settings_info['Calibrator Phaser Averages'] = 2 ** (5 + (comm.connection.read_reg(comm.Nac1)))
         self.settings_info['Calibrator Process Averages'] = 2 ** comm.connection.read_reg(comm.Nac2)
 
-        print("Setting up internal FPGA voltage readings")
+        self.logger.info("Setting up internal FPGA voltage readings")
         self.hk.setup_fpga_internal()
         if (not emulator):
-            print("Setting up I2C Mux")
+            self.logger.info("Setting up I2C Mux")
             self.hk.init_i2c_mux()
-            print("Setting up I2C ADC")
+            self.logger.info("Setting up I2C ADC")
             self.hk.init_i2c_adc()
 
-        print(f"Started the spectrometer and PCB settings, waiting {self.delay} seconds for power to stabilize")
+        self.logger.info(f"Started the spectrometer and PCB settings, waiting {self.delay} seconds for power to stabilize")
         time.sleep(self.delay)
 
-        print("Taking power data")
+        self.logger.info("Taking power data")
         #Will eventually need the name of the full row of columns in order to add rows later
         #This accumulates them as the test goes on
         all_indexes = [self.name]
@@ -234,7 +242,7 @@ class LuSEE_POWER:
         for key,val in self.power_rails.items():
             self.power_rails[key][1] = round(val[1], 3)
 
-        #print(all_indexes)
+        #self.logger.debug(all_indexes)
 
         #Loop through the left most column with all the indicators and note where the "Power" columns are
         power_columns = []
@@ -247,26 +255,19 @@ class LuSEE_POWER:
 
         #When all the columns are in place, we want to calculate total power
         #I initialize a row that will hold all the total power values
-        print("Calculating total power for each configuration")
+        self.logger.info("Calculating total power for each configuration")
         power_row = ["Total PCB Power (W)"]
         total_row = ["Total Power with LDO dissipation (W)"]
-        #print(self.df)
         for num,i in enumerate(self.df):
             #The first column just has the indexes, no values
             if (num > 0):
                 #From there just add up all the power values indicated in the column and add the total to the above row
                 total_power = 0
                 total_ldo_power = 0
-                #print("Doing power")
                 for j in power_columns:
-                    #print(j)
-                    #print(self.df[i][j])
                     total_power += self.df[i][j]
-                #print("Doing LDO")
                 for j in ldo_columns:
-                    #print(j)
                     total_ldo_power += self.df[i][j]
-                #print(f"Total power for {self.df[i][0]}is {total_power}")
                 power_row.append(total_power)
                 total_row.append(total_ldo_power + total_power)
 
@@ -322,11 +323,11 @@ class LuSEE_POWER:
 
         #Save the Excel file
         writer._save()
-        print(f"Wrote {self.name}.xlsx")
+        self.logger.info(f"Wrote {self.name}.xlsx")
 
     #Measures all the desired tests. The name argument is just the name of the configuration, "FFT off" for example
     def power_sequence(self, name):
-        print(f"Taking power data for the {name} configuration\n")
+        self.logger.info(f"Taking power data for the {name} configuration\n")
 
         #The internal measurements are quick, so I do them every time just to have them
         bank1v, bank1_8v, bank2_5v = self.hk.read_fpga_voltage()
@@ -335,11 +336,11 @@ class LuSEE_POWER:
         #Resets the running list which will eventually be the full column that is appended to the spreadsheet.
         #Has appropriate spaces to account for the labels on the first column
         running_list = ["", round(bank1v/1000, 3), round(bank1_8v/1000, 3), round(bank2_5v/1000, 3), round(fpga_temp, 3), ""]
-        print(f"1V is {bank1v} mV, 1.8V is {bank1_8v} mV, 2.5V is {bank2_5v} mV, temp is {fpga_temp} Kelvin\n")
+        self.logger.info(f"1V is {bank1v} mV, 1.8V is {bank1_8v} mV, 2.5V is {bank2_5v} mV, temp is {fpga_temp} Kelvin\n")
 
         #Loops through all desired measurements, 3.3V branch, 1.8V branch, etc...
         for key,val in self.configurations.items():
-            print(f"Measuring the {key} branch...")
+            self.logger.info(f"Measuring the {key} branch...")
 
             #Assuming each batch starts with voltage, add the space before a new batch
             if "Voltage" in key or "FPGA Thermistor" in key:
@@ -358,7 +359,7 @@ class LuSEE_POWER:
             #The ADC4 channel measures the voltage after going through a 1/2 voltage divider, anticipating having to read any higher voltages than the ADC reference
             #temp is the ADC's internal temperature, probably not useful
             adc0, adc4, temp = self.hk.read_hk_data()
-            print(f"Raw ADC0 is {adc0} and ADC4 {adc4}")
+            self.logger.info(f"Raw ADC0 is {adc0} and ADC4 {adc4}")
 
             #Correction needs to be applied because of the losses along the multiplexer chain
             adc0 = adc0 / self.correction[key]
@@ -374,7 +375,7 @@ class LuSEE_POWER:
                     adc0 = 0
                 p = round(adc0 * abs(prev_adc0), 3)
                 cable_voltage = self.get_cable_voltage(branch = key)
-                print(f"Cable voltage is {cable_voltage} and voltage was {prev_adc0} and this current is {round(adc0, 3)}")
+                self.logger.info(f"Cable voltage is {cable_voltage} and voltage was {prev_adc0} and this current is {round(adc0, 3)}")
                 p_ldo = round(abs(cable_voltage - prev_adc0) * adc0, 3)
 
                 if "+5V" in key:
@@ -403,7 +404,7 @@ class LuSEE_POWER:
 
             adc0 = round(adc0, 3)
             adc4 = round(adc4, 3)
-            print(f"ADC0 is {adc0} and ADC4 {adc4}\n")
+            self.logger.info(f"ADC0 is {adc0} and ADC4 {adc4}\n")
             #print("\n")
             #Save the values in case this is a voltage that we want to multiply by the next current to get power
             prev_adc0 = adc0
@@ -416,8 +417,8 @@ class LuSEE_POWER:
                 running_list.extend([adc0])
             #input("Is this ok?")
         #With the full column, we can now add it to the Pandas Dataframe with the configuration title
-        #print(self.df)
-        #print(running_list)
+        #self.logger.debug(self.df)
+        #self.logger.debug(running_list)
         self.df[f"{name}"] = running_list
         
     def get_cable_voltage(self, branch):
@@ -441,30 +442,38 @@ class LuSEE_POWER:
         elif (branch == "1.0VD Output Current"):
             cable_voltage = self.cable_1_0
         else:
-            print(f"Error, branch string is given as {branch} which does not exist in the table")
+            self.logger.error(f"Branch string is given as {branch} which does not exist in the table")
             return 0
         return cable_voltage
 
 if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    relative_path = 'config/config_logger.ini'
+    config_path = os.path.join(script_dir, relative_path)
+    logging.config.fileConfig(config_path)
+
     config_file = sys.argv[1]
     emulator = sys.argv[2]
+    power = LuSEE_POWER(emulator)
 
     comm = LuSEE_COMMS()
-    comm.connection.write_cdi_reg(7, 69)
-    resp = comm.connection.read_cdi_reg(7)
-    if (resp == 69):
-        print("[TEST]", "Communication to DCB Emulator is ok")
+    comm.connection.write_cdi_reg(5, 69, 32000)
+    resp = comm.connection.read_cdi_reg(5)
+    if (resp["data"] == 69):
+        power.logger.info("Communication to DCB Emulator is ok")
     else:
-        sys.exit("[TEST] -> Communication to DCB Emulator is not ok")
+        power.logger.critical(f"Communication to DCB Emulator is not ok. Response was {resp}")
+        sys.exit()
 
-    if (not emulator):
-        comm.connection.write_reg(0x120, 69)
-        resp = comm.connection.read_reg(0x120)
-        if (resp == 69):
-            print("[TEST]", "Communication to Spectrometer Board is ok")
-        else:
-            sys.exit("[TEST] -> Communication to Spectrometer Board is not ok")
+    comm.connection.write_reg(0x120, 69)
+    resp = comm.connection.read_reg(0x120)
+    if (resp == 69):
+        power.logger.info("Communication to Spectrometer Board is ok")
+    else:
+        power.logger.critical(f"Communication to Spectrometer Board is not ok. Response was {resp}")
+        sys.exit()
 
-    power = LuSEE_POWER(emulator)
+
     power.sequence(config_file)
-    print("Finished!")
+    power.stop()
+    power.logger.info("Finished!")

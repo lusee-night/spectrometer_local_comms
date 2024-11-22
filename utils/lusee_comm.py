@@ -1,9 +1,12 @@
 import time
+import logging
+import logging.config
 from datetime import datetime
 from utils import LuSEE_ETHERNET
-
+import copy
 class LuSEE_COMMS:
     def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.version = 1.13
 
         self.connection = LuSEE_ETHERNET()
@@ -113,7 +116,7 @@ class LuSEE_COMMS:
         self.CF_start_ADDR = 0x816
         self.cal_enable = 0x83C
         self.debug_fifo_used = 0x852
-        self.weight_base = 0x853
+        self.weight_base = 0x850
 
         self.readout_modes = {
             "FFT1": 0,
@@ -131,13 +134,15 @@ class LuSEE_COMMS:
         self.FFT_PACKETS = 3
         self.tries = 5
         self.bytes_per_packet = 0x7F8
-        self.counter_num = None
         self.cycle_time = 40e-6
         self.avg = 0
         self.notch_avg = 0
         self.Nac1_val = 0
         self.Nac2_val = 0
         self.wait_time = 0.025
+
+    def stop(self):
+        self.connection.stop()
 
     #Only need to do one in the beginning
     #Takes a few seconds
@@ -248,7 +253,7 @@ class LuSEE_COMMS:
             print(f"Python LuSEE Comm --> You need to use a readout method of 'fpga' or 'sw', you used {mode}")
 
     def set_counter_num(self, num):
-        self.counter_num = int(num)
+        self.connection.processing.data.count_num = int(num)
         self.connection.write_reg(self.num_samples, int(num))
 
     def reset_all_fifos(self):
@@ -450,33 +455,39 @@ class LuSEE_COMMS:
         self.connection.write_reg(register, add_value)
         return add_value
 
-    def get_data(self, data_type, num, header=False):
-        return self.connection.get_data_packets(data_type=data_type, num=num, header=header)
+    def get_adc_data(self):
+        tries = 10
+        for i in range(tries):
+            self.connection.request_fw_packet()
+            resp = self.connection.get_adc_data()
+            if (resp):
+                return resp
+            else:
+                self.logger.warning(f"ADC failed for the {i} time. Retrying")
+        self.logger.warning(f"ADC data collection could not get data after {tries} tries")
+        return None
 
-    def get_adc_data(self, header=False):
-        return self.get_data(data_type = "adc", num=self.ADC_PACKETS, header = header)
+    def get_counter_data(self):
+        self.connection.request_fw_packet()
+        return self.connection.get_count_data()
 
-    def get_counter_data(self, header=False):
-        if (self.counter_num == None):
-            print("LuSEE COMM --> You need to set the counter number before reading out the counter FIFO!")
-            return
-        packets = (self.counter_num // self.bytes_per_packet) + 1
-        return self.get_data(data_type = "adc", num=packets, header = header)
-
-    def get_pfb_data(self, header=False, wait=True):
-        if wait:
-            wait_time = self.cycle_time * (2**self.avg)
-            if (wait_time > 1.0):
-                print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
-        time.sleep(self.cycle_time * (2**self.avg))
-        return self.get_data(data_type = "fft", num=self.FFT_PACKETS, header = header)
+    def get_pfb_data(self):
+        self.connection.request_fw_packet()
+        wait_time = self.cycle_time * (2**self.avg) * 1.5
+        if (wait_time > 1.0):
+            self.logger.info(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+        else:
+            wait_time = 1
+        return self.connection.get_pfb_data(timeout = wait_time, clear = True)
 
     def get_pfb_data_sw(self, header_return = False, avg = None, test = False):
         if (avg != None):
             self.avg = avg
         #Put Python in control of readout
-        self.connection.write_reg(self.client_control, 1)
+        #self.connection.write_reg(self.client_control, 1)
 
+        #Put uC in control of readout
+        self.connection.write_reg(self.client_control, 0)
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
         self.connection.write_reg(self.scratchpad_2, 3)
@@ -497,31 +508,23 @@ class LuSEE_COMMS:
         all_header = []
         #Wait for averaging
         wait_time = self.cycle_time * (2**self.avg)
-        if (wait_time > 1.0):
-            print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
-        time.sleep(self.cycle_time * (2**self.avg))
         self.get_spec_errors()
-        #Stop sending spectrometer data to microcontroller
-        #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
         for i in range(16):
-            #Allows us to repeat, since we've gotten errors where a channel doesn't come on the first try
             received = False
             errors = 0
             while (not received):
                 apid = 0x210 + i
                 wait_i = 0
-                #Wait for microcontroller to say that data has been returned back to CDI buffer
-                while(self.connection.read_reg(self.client_ack) == 0x0):
-                    if (wait_i > 10):
-                        print("Flag didn't go high within 10 seconds of expected time, exiting")
-                        return all_data
-                    print("Waiting for data CDI flag to go high")
-                    time.sleep(1)
-                    wait_i = wait_i + 1
-                print(f"Flag is high, Python can now read channel {i}")
-                #Get data from CDI microcontroller buffer, header to check that APID was correct
-                data, header = self.connection.get_data_packets(data_type='sw', num=self.FFT_PACKETS, header = True)
+                wait_time = self.cycle_time * (2**self.avg) * 1.2
+                if (wait_time > 1.0):
+                    self.logger.info(f"Waiting up to {wait_time} seconds for PFB data because average setting is {self.avg} for {2**self.avg} averages")
+                else:
+                    wait_time = 1
+                final_header= self.connection.get_pfb_data(timeout = wait_time)
+                header = final_header["header"]
+                data = final_header["data"]
+                self.connection.write_reg(self.df_enable, 0)
                 if header == []:
                     self.connection.write_reg(self.scratchpad_1, 0x10 + (apid & 0xF))
                     received = False
@@ -542,36 +545,34 @@ class LuSEE_COMMS:
                                     self.connection.write_reg(self.scratchpad_1, 0x20 + (apid & 0xF))
                                     received = False
                                     errors += 1
-                                    print(f"Expected APID was {apid} and received APID was {int(header[pkt]['ccsds_appid'], 16)}")
-                                    print(f"Retrying channel {i}")
+                                    self.logger.error(f"Expected APID was {hex(apid)} and received APID was {hex(int(header[pkt]['ccsds_appid'], 16))}")
                                     break
                             else:
                                 self.connection.write_reg(self.scratchpad_1, 0x30 + (apid & 0xF))
                                 received = False
                                 errors += 1
-                                print("ccsds_appid not in the header dictionary")
-                                print(f"Retrying channel {i}")
+                                self.logger.error("ccsds_appid not in the header dictionary")
                                 break
                         else:
                             self.connection.write_reg(self.scratchpad_1, 0x40 + (apid & 0xF))
                             received = False
                             errors += 1
-                            print(f"Header doesn't have key {pkt}")
-                            print(f"Retrying channel {i}")
+                            self.logger.error(f"Header doesn't have key {pkt}")
                             break
                 if (errors > 10):
-                    print("That's 10 errors in a row in lusee_comm, exiting")
+                    self.logger.error("That's 10 errors in a row in lusee_comm, exiting")
                     return all_data
                 #Clear the acknowledge flag to tell microcontroller to check our response
                 self.connection.write_reg(self.client_ack, 0)
             all_data.append(data)
             all_header.append(header)
+        self.get_spec_errors()
         if (header_return):
             return all_data, all_header
         else:
             return all_data
 
-    def get_calib_data_sw(self, header_return = False, notch_avg = None, Nac1 = None, Nac2 = None, test = False,
+    def get_calib_data_sw(self, calib_mode, header_return = False, notch_avg = None, Nac1 = None, Nac2 = None, test = False,
                           wait_for_confirmation = False):
         if (notch_avg != None):
             self.notch_avg = notch_avg
@@ -581,7 +582,7 @@ class LuSEE_COMMS:
             self.Nac2_val = Nac2
 
         #Put Python in control of readout
-        self.connection.write_reg(self.client_control, 1)
+        self.connection.write_reg(self.client_control, 0)
 
         #This function could get called again with the FIFO and microcontroller cut short after errors
         #Tells the microcontroller sequence to reset
@@ -614,75 +615,45 @@ class LuSEE_COMMS:
 
         if (wait_time > 1.0):
             print(f"Waiting {wait_time} seconds for PFB data because average setting is {self.notch_avg}, {self.Nac1_val}, {self.Nac2_val} averages")
-        time.sleep(wait_time)
+        #time.sleep(wait_time)
         self.get_spec_errors()
         self.get_calib_errors()
+
+        if (calib_mode == 0):
+            packets = 10
+        elif (calib_mode == 1):
+            packets = 8
+        elif (calib_mode == 2):
+            packets = 16
+        elif (calib_mode == 3):
+            packets = 24
+        else:
+            self.logger.error(f"Calibration mode was given to function as {calib_mode}")
 
         #Stop sending spectrometer data to microcontroller
         #self.connection.write_reg(self.df_enable, 0)
         #Will return all 16 correlations
-        for i in range(28):
+        for i in range(packets):
             #Allows us to repeat, since we've gotten errors where a channel doesn't come on the first try
             received = False
             errors = 0
             dtype = "cal"
-            while (not received):
-                apid = 0x210 + i
-                wait_i = 0
-                #Wait for microcontroller to say that data has been returned back to CDI buffer
-                while(self.connection.read_reg(self.client_ack) == 0x0):
-                    if (wait_i > 10):
-                        print("Flag didn't go high within 10 seconds of expected time, exiting")
-                        return all_data
-                    print("Waiting for data CDI flag to go high")
-                    time.sleep(1)
-                    wait_i = wait_i + 1
-                print(f"Flag is high, Python can now read channel {i}")
-                data_size = self.connection.read_reg(self.tlm_details) & 0xFFFF
-                num_packets = (data_size // (1024 - 13)) + 1
-                print(f"data_size is {data_size}, num_packets is {num_packets}")
-                #Get data from CDI microcontroller buffer, header to check that APID was correct
-                rawdata = self.connection.get_data_packets(data_type=dtype, num=num_packets, header = True)
-                data, header = self.connection.check_data_cal(data = rawdata, data_len = data_size)
-                if header == []:
-                    self.connection.write_reg(self.scratchpad_1, 0x10 + (apid & 0xF))
-                    received = False
-                    errors += 1
-                    print(f"Header is empty")
-                    print(f"Retrying channel {i}")
-                else:
-                    #Data usually comes in 3 packets and has 3 separate headers
-                    for pkt in range(num_packets):
-                        if pkt in header:
-                            if 'ccsds_appid' in header[pkt]:
-                                self.connection.write_reg(self.scratchpad_1, (apid & 0xF))
-                                received = True
-                            else:
-                                self.connection.write_reg(self.scratchpad_1, 0x30 + (apid & 0xF))
-                                received = False
-                                errors += 1
-                                print("ccsds_appid not in the header dictionary")
-                                print(f"Retrying channel {i}")
-                                break
-                        else:
-                            self.connection.write_reg(self.scratchpad_1, 0x40 + (apid & 0xF))
-                            received = False
-                            errors += 1
-                            print(f"Header doesn't have key {pkt}")
-                            print(f"Retrying channel {i}")
-                            break
-                if (errors > 10):
-                    print("That's 10 errors in a row in lusee_comm, exiting")
-                    return all_data
-                #Clear the acknowledge flag to tell microcontroller to check our response
-                self.connection.write_reg(self.client_ack, 0)
-                print(f"Recieved proper packet of {int(header[pkt]['ccsds_appid'], 16)}")
-            all_data.append(data)
-            all_header.append(header)
+            #while (not received):
+            apid = 0x210 + i
+            final_header = self.connection.get_calib_data(timeout = wait_time)
+            self.logger.info(f"Received {i}")
+            header = final_header["header"]
+            data = final_header["data"]
+            self.logger.info(f"Recieved proper packet of {hex(int(header[0]['ccsds_appid'], 16))}")
+            all_data.append(copy.deepcopy(data))
+            all_header.append(copy.deepcopy(header))
+        self.connection.write_reg(self.CF_Enable, 0)
         if (header_return):
             d = {}
             d['debug_fifo_used'] = self.connection.read_reg(self.debug_fifo_used)
             for i in range(0x81c, 0x83B+1):
+                d[f"Register {hex(i)}"] = hex(self.connection.read_reg(i))
+            for i in range(0x9EB, 0x9EE+1):
                 d[f"Register {hex(i)}"] = hex(self.connection.read_reg(i))
             all_header.append(d)
             return all_data, all_header
@@ -691,12 +662,16 @@ class LuSEE_COMMS:
 
     def get_calib_errors(self):
         for i in range(0x81c, 0x83B+1):
-            print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
+            self.logger.warning(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
+
+        for i in range(0x9EB, 0x9EE+1):
+            self.logger.warning(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
 
     def get_spec_errors(self):
-        print(f"Register 0x432 is {hex(self.connection.read_reg(0x432))}")
+        self.logger.warning(f"Lusee_comm getting spec errors")
+        self.logger.warning(f"Register 0x432 is {hex(self.connection.read_reg(0x432))}")
         for i in range(0x460, 0x46F+1):
-            print(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
+            self.logger.warning(f"Register {hex(i)} is {hex(self.connection.read_reg(i))}")
 
     def set_chan_gain(self, ch, in1, in2, gain):
         chs=[2,1,0,3,4,5,6,7]
@@ -727,7 +702,7 @@ class LuSEE_COMMS:
 
     def setup_calibrator(self, Nac1, Nac2, notch_index, cplx_index, sum1_index, sum2_index, powertop_index, powerbot_index, driftFD_index,
                          driftSD1_index, driftSD2_index, default_drift, have_lock_value, have_lock_radian, lower_guard_value, upper_guard_value, power_ratio, antenna_enable,
-                         power_slice, fdsd_slice, fdxsdx_slice):
+                         power_slice, fdsd_slice, fdxsdx_slice, sum0shift, SNRon, SNRoff, Nsettle, delta_drift_cor_A, delta_drift_cor_B, prod_index, prod_index2):
 
         self.connection.write_reg(self.Nac1, Nac1)
         self.connection.write_reg(self.Nac2, Nac2)
@@ -751,6 +726,15 @@ class LuSEE_COMMS:
         self.connection.write_reg(0x83D, power_slice)
         self.connection.write_reg(0x83E, fdsd_slice)
         self.connection.write_reg(0x83F, fdxsdx_slice)
+
+        self.connection.write_reg(0x841, sum0shift)
+        self.connection.write_reg(0x842, SNRon)
+        self.connection.write_reg(0x843, SNRoff)
+        self.connection.write_reg(0x844, Nsettle)
+        self.connection.write_reg(0x845, delta_drift_cor_A)
+        self.connection.write_reg(0x846, delta_drift_cor_B)
+        self.connection.write_reg(0x9F0, prod_index)
+        self.connection.write_reg(0x9F1, prod_index2)
 
     def apply_weight(self, weight, val):
         weight_register = self.weight_base + weight

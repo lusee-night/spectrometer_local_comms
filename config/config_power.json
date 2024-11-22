@@ -46,7 +46,7 @@
 
 "adc4_save_data": true,
 "adc4_plot": true,
-"adc4_plot_show": true,
+"adc4_plot_show": false,
 "adc4_plot_save": true,
 "adc4_plot_overlay": false,
 
@@ -110,7 +110,7 @@
 
 "pfb4_fpga_save_data": true,
 "pfb4_fpga_plot": true,
-"pfb4_fpga_plot_show": true,
+"pfb4_fpga_plot_show": false,
 "pfb4_fpga_plot_save": true,
 
 "pfb_sw_save_data": false,

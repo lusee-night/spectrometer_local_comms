@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import os, time, sys, socket, math
 import numpy as np
+import logging
+import logging.config
 
 #from lusee_common import LuSEE_COMMON
 from utils import LuSEE_COMMS
@@ -8,8 +10,8 @@ from utils import LuSEE_ETHERNET
 
 class LuSEE_HK:
     def __init__(self):
-        self.version = 1.01
-        #self.lusee = LuSEE_COMMON()
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger.debug("Class created")
         self.comm        = LuSEE_COMMS()
         self.connection  = LuSEE_ETHERNET()
         self.tvs_cntl    = 0x004
@@ -72,17 +74,17 @@ class LuSEE_HK:
         self.write_i2c(self.hk_mux_dev, 0x2, 0x2, val)
         resp = self.read_i2c(self.hk_mux_dev, 0x2, 0x2)
         if (resp == val):
-            print(f"I2C mux written to {resp:x}")
+            self.logger.info(f"I2C mux written to {resp:x}")
             return 0
         else:
-            print(f"Error: I2C mux was supposed to be written to {val:x}, but was read back as {resp:x}")
+            self.logger.error(f"I2C mux was supposed to be written to {val:x}, but was read back as {resp:x}")
             return 1
 
     def check_i2c_status(self):
         while True:
             val=self.connection.read_reg(self.i2c_dout_status)
             if (((val>>16)&0x1)==1):
-                print (f'LuSEE_HK --> Core busy: {hex(val)}')
+                self.logger.debug(f'LuSEE_HK --> Core busy: {hex(val)}')
                 time.sleep (1.01)
             # elif (((val>>17)&0x1)==1):
             #     print (f'LuSEE_HK --> Device Unavailable: {hex(val)}')
@@ -138,7 +140,7 @@ class LuSEE_HK:
 
     def convert_volt(self, val):
         if (val > 0xFFFF):
-            print(f"Error: Only pass 16 bit values into this voltage function. You passed {hex(val)}")
+            self.logger.error(f"Only pass 16 bit values into this voltage function. You passed {hex(val)}")
             return 0
         else:
             sign = val >> 15
@@ -151,7 +153,7 @@ class LuSEE_HK:
 
     def convert_temp(self, val):
         if (val > 0xFFFF):
-            print(f"Error: Only pass 16 bit values into this temp function. You passed {hex(val)}")
+            self.logger.error(f"Only pass 16 bit values into this temp function. You passed {hex(val)}")
             return 0
         else:
             sign = val >> 15
@@ -184,28 +186,28 @@ class LuSEE_HK:
         #Thermistor is read through a voltage divider, get the thermistor resistance
         r_th = self.thermistor_res * (1/((self.thermistor_voltage/val1) - 1))
         ratio = r_th/self.t_r25
-        #print(f"Input voltage was {val1} and thermistor resistance was {r_th} and ratio is {ratio}")
+        self.logger.debug(f"Input voltage was {val1} and thermistor resistance was {r_th} and ratio is {ratio}")
         if (ratio > self.ratio_max):
-            print(f"Error: Thermistor ratio is {ratio} which is higher than the datasheet maximum")
+            self.logger.error(f"Thermistor ratio is {ratio} which is higher than the datasheet maximum")
             return 0, 0
         coefficients = None
         for key, val in self.temp_coefficients.items():
-            #print(f"coefficients are {key}, {val}")
+            #self.logger.debug(f"coefficients are {key}, {val}")
             if (ratio > key):
                 coefficients = val
                 break
         if (coefficients == None):
-            print(f"Error: Thermistor ratio is {ratio} which is lower than the datasheet minimum")
+            self.logger.error(f"Thermistor ratio is {ratio} which is lower than the datasheet minimum")
             return 0, 0
 
-        #print(f"coefficients are {coefficients}")
+        #self.logger.debug(f"coefficients are {coefficients}")
         a = coefficients[0]
         b = coefficients[1]
         c = coefficients[2]
         d = coefficients[3]
 
         term = a + b * (np.log(ratio)) + c * (np.log(ratio) ** 2) + d * (np.log(ratio) ** 3)
-        print(f"Temperature calculated as {1/term}")
+        self.logger.info(f"Temperature calculated as {1/term}")
 
         return int(1/term), 0
 
@@ -234,22 +236,22 @@ if __name__ == "__main__":
     hk = LuSEE_HK()
     #hk.comm.setup_adc()
     #hk.comm.write_adc_reg(adc_id = 1, reg = 0x45, data = 0x84)
-    #print ('sleeping')
+    #hk.logger.info ('sleeping')
     #time.sleep(10)
 
     hk.setup_fpga_internal()
     bank1v, bank1_8v, bank2_5v = hk.read_fpga_voltage()
-    print(f"1V Bank Voltage is {bank1v} mV")
-    print(f"1.8V Bank Voltage is {bank1_8v} mV")
-    print(f"2.5V Bank Voltage is {bank2_5v} mV")
+    hk.logger.info(f"1V Bank Voltage is {bank1v} mV")
+    hk.logger.info(f"1.8V Bank Voltage is {bank1_8v} mV")
+    hk.logger.info(f"2.5V Bank Voltage is {bank2_5v} mV")
 
     temp = hk.read_fpga_temp()
-    print(f"Temperature is {temp} C")
+    hk.logger.info(f"Temperature is {temp} C")
 
     hk.init_i2c_mux()
     hk.write_i2c_mux(0x0001)
 
     adc0, adc4, temp = hk.read_hk_data()
-    print(f"ADC0 response is {adc0}")
-    print(f"ADC4 response is {adc4}")
-    print(f"Temp response is {temp}")
+    hk.logger.info(f"ADC0 response is {adc0}")
+    hk.logger.info(f"ADC4 response is {adc4}")
+    hk.logger.info(f"Temp response is {temp}")
